@@ -25,6 +25,7 @@ import argparse
 import math
 import os
 import random
+import sys
 import time
 import uuid
 from typing import Any
@@ -93,7 +94,7 @@ def post_event(api: str, node_id: str, source: str, is_event: bool, demo: bool =
 
 
 # ── ESP32 polling ─────────────────────────────────────────────────────────────
-def poll_esp32(esp32_url: str) -> list[dict[str, Any]]:
+def poll_esp32(esp32_url: str) -> list[dict[str, Any]] | None:
     """GET /events from the ESP32, returns list of event dicts (clears the queue)."""
     try:
         response = requests.get(f"{esp32_url}/events", timeout=4)
@@ -101,7 +102,7 @@ def poll_esp32(esp32_url: str) -> list[dict[str, Any]]:
         return response.json()
     except requests.RequestException as exc:
         print(f"ESP32 poll failed: {exc}")
-        return []
+        return None
 
 
 def status_esp32(esp32_url: str) -> None:
@@ -122,6 +123,11 @@ def live_loop(api: str, esp32_url: str, node_id: str, interval: float) -> None:
     print(f"Node: {node_id}  (Ctrl-C to stop)\n")
     while True:
         events = poll_esp32(esp32_url)
+        if events is None:
+            # ESP32 unreachable: send nothing, so the dashboard shows the node going stale
+            # instead of a fabricated keep-alive.
+            time.sleep(interval)
+            continue
         if events:
             for evt in events:
                 source   = evt.get("source", "esp32_node")
@@ -154,6 +160,12 @@ def demo_loop(api: str, node_id: str, interval: float) -> None:
 
 
 def main() -> None:
+    # Windows consoles/redirects default to cp1252, which cannot print "→"; never crash on logging.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--api",     default="http://localhost:8000",  help="BhuDrishti backend URL")
     parser.add_argument("--esp32",   default="http://192.168.4.1",     help="ESP32 SoftAP HTTP base URL")

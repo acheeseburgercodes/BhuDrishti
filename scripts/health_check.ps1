@@ -6,7 +6,7 @@ function Report($name, $ok, $detail) {
 }
 
 # 1. Backend endpoints
-foreach ($p in "/api/health","/api/model","/api/nodes","/api/events") {
+foreach ($p in "/api/health","/api/config","/api/model","/api/nodes","/api/events","/api/alerts","/api/coverage","/api/agents/providers") {
     try {
         $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ("http://127.0.0.1:8000" + $p)
         Report "backend$p" ($r.StatusCode -eq 200) ("HTTP " + $r.StatusCode)

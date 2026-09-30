@@ -1,71 +1,88 @@
 # BhuDrishti
 
-BhuDrishti is a runnable prototype for Trishuli/Bhote Koshi flood-corridor telemetry in
-the Rasuwa/Nuwakot region of Nepal. It combines a
-FastAPI service, an explainable scikit-learn classifier, and a Vite/React dashboard with a
-Leaflet map, live waveform, coverage-gap view, and simulated ESP32 events.
+Early-warning **prototype** for the Trishuli / Bhote Koshi flood and debris-flow corridor
+(Rasuwa–Nuwakot, Nepal). ESP32 field nodes and phones submit vibration windows; a FastAPI
+service classifies them, cross-confirms independent sources, drafts alerts for human
+approval and publishes live state to a web dashboard and an Expo companion app.
 
-## Quick start
+> Not a certified life-safety system. Demo values are labelled as demo everywhere. Always
+> follow official NDRRMA / DHM instructions.
 
-### Backend
+| Part | Path | Stack |
+| --- | --- | --- |
+| API | `backend/` | FastAPI, scikit-learn, optional Supabase (PostgREST) |
+| Web | `frontend/` | React 18, Vite, Tailwind CSS v4, MapLibre GL |
+| Mobile | `mobile/` | Expo SDK 53, expo-sensors, WebView + MapLibre |
+| Shared contracts | `shared/` | Dependency-free ESM: validation, offline queue, coverage, i18n |
+| Database | `supabase/migrations/` | Idempotent SQL, RLS, Realtime |
+| Firmware / bridge | `glof_*`, `BhuDrishti/`, `scripts/esp32_bridge.py` | ESP32 SoftAP `GET 192.168.4.1/events` |
+
+Docs: [architecture](docs/ARCHITECTURE.md) · [API](docs/API.md) · [coverage method](docs/COVERAGE.md) ·
+[Supabase](docs/SUPABASE.md) · [AI & language providers](docs/PROVIDERS.md) · [UI provenance](docs/UI_PROVENANCE.md)
+
+## Run it on Windows PowerShell (demo mode, no secrets)
 
 ```powershell
+# 1. API
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
+pip install -r requirements-dev.txt
+uvicorn main:app --reload --port 8000        # http://localhost:8000/docs
 
-The API is available at `http://localhost:8000/docs`. The service loads
-`nepal-flood-corridor-seed-data.json` from the repository root and falls back to built-in
-data if the file is missing.
-
-### Frontend
-
-```powershell
+# 2. Web (new terminal)
 cd frontend
 npm install
-npm run dev
+npm run dev                                   # http://localhost:5173  (legacy UI: /#legacy)
+
+# 3. Mobile (new terminal; phone on the same Wi-Fi, Expo Go installed)
+cd mobile
+npm install
+npx expo start                                # set the laptop's LAN URL in the app's Settings tab
+
+# 4. Feed data
+python scripts\esp32_bridge.py --demo         # synthetic ESP32/phone events
+python scripts\esp32_bridge.py                # real ESP32: polls http://192.168.4.1/events
 ```
 
-Open `http://localhost:5173`. Set `VITE_API_URL` when the API is not running on port 8000.
+`scripts\start_services.ps1` starts API + web detached; `scripts\health_check.ps1` probes
+them. `scripts\verify.ps1` runs every test suite and build.
 
-### Supabase event history
+Without environment variables the API runs in **demo mode**: seed nodes from
+`nepal-flood-corridor-seed-data.json` get freshness relative to start-up, everything is
+labelled Demo, and data lives in memory. If the web app cannot reach the API it shows a
+bundled fixture with an explicit "offline fixture" banner.
 
-Events are persisted by the backend to Supabase when `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY` are configured. Copy `.env.example` to `.env`, fill in the
-backend-only credentials, and run `supabase/events.sql` in the Supabase SQL editor.
-The service-role key must never be added to the frontend or committed to source control.
-Without these variables, the app uses the in-memory prototype buffer.
+## Switching to real services
 
-### ESP32 bridge
+Copy `.env.example` to `.env` and fill only what you need (names only are committed):
 
-`scripts/esp32_bridge.py` can forward newline-delimited JSON from a serial port to the
-ingest endpoint:
+* `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` → persistence (backend only). Apply
+  `supabase/migrations/*.sql` first, see [docs/SUPABASE.md](docs/SUPABASE.md).
+* `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` → browser Realtime (anon key, RLS-limited).
+* `BHUDRISHTI_OPERATOR_TOKEN` → required for alert approval / agent runs from non-loopback clients.
+* `BHUDRISHTI_DEVICE_KEY` → require `X-Device-Key` on ingestion (the bridge reads the same variable).
+* `SARVAM_API_KEY` → server-side translation. Provider keys → optional LLM refinement.
+
+The service-role, Sarvam and provider keys are never sent to browsers or phones
+(`/api/config` exposes only public values; covered by tests).
+
+## Tests
 
 ```powershell
-python scripts/esp32_bridge.py --port COM5 --api http://localhost:8000
+.\scripts\verify.ps1          # all suites + web build + mobile bundle
 ```
 
-It also supports `--demo` to emit synthetic telemetry without hardware.
+Individually: `backend\.venv\Scripts\python.exe -m pytest -q` (repo root),
+`npm test` in `shared/`, `mobile/`, `frontend/`, and `npm run build` in `frontend/`.
+There is no linter configured yet.
 
-## API overview
+## Model
 
-* `GET /api/nodes`, `/api/settlements`, `/api/coverage-gaps` — map and status data.
-* `POST /api/classify` — classify a raw vibration window and return the extracted features.
-* `POST /api/ingest` — validate a sensor reading window, classify it, persist it in memory, and
-  broadcast the event to websocket clients.
-* `POST /api/simulate-event` — create a realistic event for a selected node.
-* `GET /api/events` — recent readings and model decisions (from Supabase when configured).
-* `WS /ws/live` — JSON event stream for dashboard clients.
-
-The model is an explainable logistic regression trained on deterministic synthetic vibration
-windows: low-amplitude ambient noise versus a sharp attack and exponential-decay collapse
-signature. Every prediction returns peak amplitude, RMS, zero-crossing rate, dominant FFT
-frequency, duration, and decay envelope. Run `python scripts/retrain_model.py` to regenerate
-`backend/model_artifact.json`. Replace `synthetic_training_data` in `backend/model.py` with
-labelled sensor-collected or USGS windows when real data is available.
-
-This is a demonstration system, not a safety-critical warning service.
-# BhuDrishti
+Logistic regression on transparent features (peak, RMS, zero-crossing rate, dominant FFT
+frequency, decay envelope) trained on **synthetic** windows; real-world accuracy is
+unknown. `python scripts/retrain_model.py` regenerates `backend/model_artifact.json`.
+The ESP32 bridge synthesises waveforms because the sketch sends no raw IMU samples; those
+readings carry `synthetic_window: true` and are badged in the UI. When the ESP32 is
+unreachable the bridge now sends nothing (previously it posted keep-alives), so the node
+correctly goes stale on the dashboard.
