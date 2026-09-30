@@ -51,7 +51,7 @@ export function CaptureScreen() {
     const payload = {
       node_id: settings.nodeId, device_id: settings.deviceId, sensor_window: window, source: 'phone_layer', channel: 'mobile_app',
       transport: net.type === 'cellular' ? 'cellular' : 'http', client_event_id: makeClientEventId('m'), captured_at: new Date().toISOString(),
-      sample_rate_hz: Math.max(10, Math.min(1000, Math.round(rateHz))), app_version: '2.0.0',
+      sample_rate_hz: Math.max(10, Math.min(1000, Math.round(rateHz))), app_version: '2.1.0',
     }
     const check = validateTelemetry(payload)
     if (!check.ok) { setMessage(check.errors.join('; ')); setPhase('idle'); return }

@@ -13,6 +13,10 @@ backend/.venv/
 mobile/.expo/
 mobile/node_modules/
 mobile/dist/
+mobile/android/
+mobile/ios/
+*.apk
+*.aab
 shared/node_modules/
 node_modules/
 logs/

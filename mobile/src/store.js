@@ -3,13 +3,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import NetInfo from '@react-native-community/netinfo'
 import { OfflineQueue, makeT } from './shared'
 import { getJson, makeSender, normaliseBaseUrl } from './sender'
+import { ensureNotifications, notifyNewAlerts } from './notify'
 
 const DEFAULTS = {
   apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.10:8000',
   nodeId: 'BD-001',
   deviceId: '',
+  deviceKey: '',
   lang: 'en',
   autoSend: false,
+  notify: true,
 }
 const SETTINGS_KEY = '@bhudrishti/settings.v2'
 const CACHE_KEY = '@bhudrishti/cache.v1'
@@ -49,6 +52,7 @@ export function AppProvider({ children }) {
       if (!next.deviceId) next.deviceId = randomDeviceId()
       setSettings(next)
       setLoaded(true)
+      if (next.notify !== false) ensureNotifications()
     })()
     const offQueue = queue.subscribe(setQueueStatus)
     queue.load()
@@ -62,7 +66,7 @@ export function AppProvider({ children }) {
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next))
   }, [])
 
-  const sender = useCallback((payload) => makeSender({ baseUrl: settingsRef.current.apiUrl })(payload), [])
+  const sender = useCallback((payload) => makeSender({ baseUrl: settingsRef.current.apiUrl, deviceKey: settingsRef.current.deviceKey || undefined })(payload), [])
 
   const flush = useCallback(async (force = false) => {
     try { return await queue.flush(sender, { force }) } catch { return null }
@@ -79,6 +83,7 @@ export function AppProvider({ children }) {
       setData({ ...next, cached: false })
       setServer({ reachable: true, mode: health.mode, lastSync: new Date().toISOString(), error: null })
       AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ ...next, events: events.slice(0, 10).map(({ telemetry, ...e }) => e) })).catch(() => {})
+      if (settingsRef.current.notify) notifyNewAlerts(alerts, makeT(settingsRef.current.lang)).catch(() => {})
     } catch (error) {
       setServer((s) => ({ ...s, reachable: false, error: error.message }))
       setData((d) => ({ ...d, cached: d.alerts.length > 0 || d.nodes.length > 0 }))

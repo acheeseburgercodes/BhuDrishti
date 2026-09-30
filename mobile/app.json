@@ -2,22 +2,54 @@
   "expo": {
     "name": "BhuDrishti",
     "slug": "bhudrishti-mobile",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "splash": { "backgroundColor": "#0d1413" },
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d1413"
+    },
     "android": {
       "package": "com.bhudrishti.mobile",
+      "versionCode": 3,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0d1413"
+      },
       "permissions": [
         "android.permission.INTERNET",
-        "android.permission.ACCESS_NETWORK_STATE"
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE"
       ]
     },
     "ios": {
       "bundleIdentifier": "com.bhudrishti.mobile"
     },
     "plugins": [
-      ["expo-sensors", { "motionPermission": "BhuDrishti records short motion samples you start yourself to detect ground vibration near the river." }]
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "BhuDrishti records short motion samples you start yourself to detect ground vibration near the river."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2dd4bf"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "minSdkVersion": 24
+          }
+        }
+      ]
     ]
   }
 }

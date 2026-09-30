@@ -210,7 +210,8 @@ async def get_devices() -> list[dict[str, Any]]:
             if rows:
                 return rows
         except requests.RequestException as exc:
-            log.warning("device registry read failed: %s", type(exc).__name__)
+            if not store.circuit_open:
+                log.warning("device registry read failed: %s", type(exc).__name__)
     return nodes
 
 
@@ -249,7 +250,8 @@ async def get_events(limit: int = 30) -> list[dict[str, Any]]:
         try:
             return store.list_events(bounded)
         except requests.RequestException as exc:
-            log.warning("supabase event query failed, serving memory buffer: %s", type(exc).__name__)
+            if not store.circuit_open:  # while the breaker is open it has already logged once
+                log.warning("supabase event query failed, serving memory buffer: %s", type(exc).__name__)
     return events[:bounded]
 
 

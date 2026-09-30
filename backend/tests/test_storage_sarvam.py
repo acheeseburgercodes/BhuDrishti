@@ -41,13 +41,38 @@ def test_configured_store_writes_events_and_decisions_with_server_key():
 def test_write_failure_is_queued_and_drained():
     session = MagicMock()
     session.post.side_effect = requests.ConnectionError("down")
-    store = configured_store(session)
+    now = [1000.0]
+    store = SupabaseStore(Settings(supabase_url="https://example.supabase.co", supabase_service_key="service-secret"),
+                          session=session, clock=lambda: now[0])
     assert store.write("events", {"id": "a"}) is False
-    assert store.status()["state"] == "degraded" and len(store.outbox) == 1
+    assert store.status()["state"] == "offline" and len(store.outbox) == 1
     session.post.side_effect = None
     session.post.return_value.raise_for_status.return_value = None
+    now[0] += SupabaseStore.BREAKER_BASE_S + 1  # breaker cools down
     assert store.write("events", {"id": "b"}) is True
-    assert len(store.outbox) == 0
+    assert len(store.outbox) == 0 and store.status()["state"] == "ok"
+
+
+def test_circuit_breaker_stops_network_calls_while_offline():
+    session = MagicMock()
+    session.post.side_effect = requests.ConnectionError("down")
+    session.get.side_effect = requests.ConnectionError("down")
+    now = [0.0]
+    store = SupabaseStore(Settings(supabase_url="https://example.supabase.co", supabase_service_key="k"),
+                          session=session, clock=lambda: now[0])
+    store.write("events", {"id": "a"})
+    for i in range(20):  # a burst of ingests + dashboard polls while offline
+        assert store.write("events", {"id": f"x{i}"}) is False
+        try:
+            store.list_events(5)
+        except requests.RequestException:
+            pass
+    assert session.post.call_count == 1 and session.get.call_count == 0
+    assert len(store.outbox) == 21 and store.status()["retry_in_s"] > 0
+    # A second failure doubles the cooldown.
+    now[0] += SupabaseStore.BREAKER_BASE_S + 1
+    store.write("events", {"id": "y"})
+    assert store._open_until - now[0] == SupabaseStore.BREAKER_BASE_S * 2
 
 
 def test_row_mapping_roundtrip():

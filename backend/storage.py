@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections import deque
 from typing import Any
 
@@ -29,8 +30,20 @@ TABLES = (
 )
 
 
+class StoreUnavailable(requests.ConnectionError):
+    """Raised without touching the network while the circuit breaker is open."""
+
+
 class SupabaseStore:
-    def __init__(self, cfg: Settings | None = None, session: requests.Session | None = None, outbox_size: int = 1000) -> None:
+    # Circuit breaker: after a connection-level failure (DNS, refused, timeout) stop calling
+    # Supabase for a cooling-off period that doubles on each consecutive failure. Without
+    # it, every ingest and every dashboard poll paid the full timeout while offline in the
+    # field and the log filled with one warning per request.
+    BREAKER_BASE_S = 15.0
+    BREAKER_MAX_S = 300.0
+
+    def __init__(self, cfg: Settings | None = None, session: requests.Session | None = None, outbox_size: int = 1000,
+                 clock=time.monotonic) -> None:
         cfg = cfg or default_settings
         self.url = cfg.supabase_url
         self.key = cfg.supabase_service_key
@@ -38,15 +51,41 @@ class SupabaseStore:
         self.outbox: deque[tuple[str, dict[str, Any], str | None]] = deque(maxlen=outbox_size)
         self.last_error: str | None = None
         self._lock = threading.Lock()
+        self._clock = clock
+        self._failures = 0
+        self._open_until = 0.0
 
     @property
     def configured(self) -> bool:
         return bool(self.url and self.key)
 
+    @property
+    def circuit_open(self) -> bool:
+        return self._clock() < self._open_until
+
+    def _trip(self, exc: Exception) -> None:
+        if not isinstance(exc, (requests.ConnectionError, requests.Timeout)) or isinstance(exc, StoreUnavailable):
+            return
+        self._failures += 1
+        cooldown = min(self.BREAKER_MAX_S, self.BREAKER_BASE_S * 2 ** (self._failures - 1))
+        self._open_until = self._clock() + cooldown
+        log.warning("supabase unreachable (%s); pausing calls for %.0fs", type(exc).__name__, cooldown)
+
+    def _reset(self) -> None:
+        if self._failures:
+            log.info("supabase reachable again")
+        self._failures = 0
+        self._open_until = 0.0
+
+    def _guard(self) -> None:
+        if self.circuit_open:
+            raise StoreUnavailable("supabase circuit open")
+
     def status(self) -> dict[str, Any]:
-        return {"configured": self.configured, "outbox": len(self.outbox),
-                "state": "disabled" if not self.configured else ("degraded" if self.outbox or self.last_error else "ok"),
-                "last_error": self.last_error}
+        retry_in = max(0.0, self._open_until - self._clock())
+        state = "disabled" if not self.configured else ("offline" if retry_in else ("degraded" if self.outbox or self.last_error else "ok"))
+        return {"configured": self.configured, "outbox": len(self.outbox), "state": state,
+                "last_error": self.last_error, "retry_in_s": round(retry_in) if retry_in else 0}
 
     def _headers(self, prefer: str = "return=minimal") -> dict[str, str]:
         if not self.configured:
@@ -59,7 +98,13 @@ class SupabaseStore:
             raise ValueError(f"unknown table {table}")
         params = {"on_conflict": on_conflict} if on_conflict else None
         prefer = "return=minimal" + (",resolution=merge-duplicates" if on_conflict else "")
-        response = self.session.post(f"{self.url}/rest/v1/{table}", headers=self._headers(prefer), params=params, json=rows, timeout=8)
+        self._guard()
+        try:
+            response = self.session.post(f"{self.url}/rest/v1/{table}", headers=self._headers(prefer), params=params, json=rows, timeout=8)
+        except requests.RequestException as exc:
+            self._trip(exc)
+            raise
+        self._reset()
         response.raise_for_status()
 
     def write(self, table: str, row: dict[str, Any], on_conflict: str | None = None) -> bool:
@@ -67,6 +112,9 @@ class SupabaseStore:
         if not self.configured:
             return False
         with self._lock:
+            if self.circuit_open:  # offline: queue silently, the breaker already logged once
+                self.outbox.append((table, row, on_conflict))
+                return False
             self._drain_locked(limit=20)
             try:
                 self._post(table, row, on_conflict)
@@ -74,7 +122,8 @@ class SupabaseStore:
                 return True
             except requests.RequestException as exc:
                 self.last_error = f"{table}: {type(exc).__name__}"
-                log.warning("supabase write to %s failed; queued (%s)", table, type(exc).__name__)
+                if not isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+                    log.warning("supabase write to %s failed; queued (%s)", table, type(exc).__name__)
                 self.outbox.append((table, row, on_conflict))
                 return False
 
@@ -90,7 +139,13 @@ class SupabaseStore:
     def select(self, table: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         if table not in TABLES:
             raise ValueError(f"unknown table {table}")
-        response = self.session.get(f"{self.url}/rest/v1/{table}", headers=self._headers("return=representation"), params=params, timeout=8)
+        self._guard()
+        try:
+            response = self.session.get(f"{self.url}/rest/v1/{table}", headers=self._headers("return=representation"), params=params, timeout=8)
+        except requests.RequestException as exc:
+            self._trip(exc)
+            raise
+        self._reset()
         response.raise_for_status()
         return response.json()
 
