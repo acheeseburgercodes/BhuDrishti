@@ -112,7 +112,19 @@ def find_node(node_id: str) -> dict[str, Any]:
 def build_event(telemetry: TelemetryIn) -> dict[str, Any]:
     node = find_node(telemetry.node_id)
     if node is None:
-        raise HTTPException(status_code=404, detail=f"Unknown node: {telemetry.node_id}")
+        if telemetry.source != "phone_layer":
+            raise HTTPException(status_code=404, detail=f"Unknown node: {telemetry.node_id}")
+        anchor = nodes[0] if nodes else {"lat": 28.05, "lng": 85.25}
+        node = {
+            "id": telemetry.node_id,
+            "name": f"Phone Layer · {telemetry.node_id}",
+            "lat": anchor.get("lat"),
+            "lng": anchor.get("lng"),
+            "status": "online",
+            "battery_pct": telemetry.battery_pct,
+            "source": "phone_layer",
+        }
+        nodes.append(node)
     model = classify(telemetry.sensor_window)
     recent_sources = {
         prior["source"]
@@ -143,6 +155,32 @@ def build_event(telemetry: TelemetryIn) -> dict[str, Any]:
     events.insert(0, event)
     del events[100:]
     return event
+
+
+@app.get("/api/model")
+async def get_model_info() -> dict[str, Any]:
+    """Return model metadata, training metrics, and feature importances."""
+    try:
+        from .model import ARTIFACT, FEATURES
+    except ImportError:
+        from model import ARTIFACT, FEATURES
+    coeffs = ARTIFACT.get("coefficients", [[]])[0]
+    abs_coeffs = [abs(c) for c in coeffs]
+    total = sum(abs_coeffs) or 1
+    return {
+        "model_type": "Logistic Regression (sklearn)",
+        "features": FEATURES,
+        "training_samples": ARTIFACT.get("training_samples"),
+        "validation_samples": ARTIFACT.get("validation_samples"),
+        "validation_accuracy": ARTIFACT.get("validation_accuracy"),
+        "validation_balanced_accuracy": ARTIFACT.get("validation_balanced_accuracy"),
+        "feature_importances": [
+            {"feature": f, "coefficient": round(c, 4), "importance": round(abs(c) / total, 4)}
+            for f, c in zip(FEATURES, coeffs)
+        ],
+        "labels": ARTIFACT.get("labels", ["normal", "event"]),
+        "note": "Trained on synthetic vibration windows. Replace synthetic_training_data() with labelled field/USGS data for production."
+    }
 
 
 @app.post("/api/classify")

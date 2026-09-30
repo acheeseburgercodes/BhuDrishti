@@ -26,10 +26,34 @@ function App() {
   const [severity, setSeverity] = useState('random')
   const [loading, setLoading] = useState(true)
   const [phoneMonitoring, setPhoneMonitoring] = useState(false)
+  const [phoneStatus, setPhoneStatus] = useState('')
   const [incomingSignal, setIncomingSignal] = useState(null)
   const [activeNav, setActiveNav] = useState('gis')
   const phoneWindow = useRef([])
   const lastPhoneAlert = useRef(0)
+  const seenEventIds = useRef(new Set())
+  const alertTimer = useRef(null)
+
+  const raiseUrgentAlert = useCallback((event) => {
+    if (event.classification?.classification !== 'event') return
+    setIncomingSignal(event)
+    window.clearTimeout(alertTimer.current)
+    alertTimer.current = window.setTimeout(() => setIncomingSignal(null), 12000)
+  }, [])
+
+  const applyTelemetryEvent = useCallback((event, announce = true) => {
+    if (!event?.id) return
+    if (announce && !seenEventIds.current.has(event.id)) raiseUrgentAlert(event)
+    seenEventIds.current.add(event.id)
+    setEvents((current) => [event, ...current.filter((item) => item.id !== event.id)].slice(0, 60))
+    setNodes((current) => {
+      const updated = current.map((node) => node.id === event.node_id
+        ? { ...node, name: event.node_name || node.name, lat: event.lat ?? node.lat, lng: event.lng ?? node.lng, status: event.classification?.classification === 'normal' ? 'online' : 'critical', battery_pct: event.telemetry?.battery_pct, last_seen: event.recorded_at }
+        : node)
+      if (updated.some((node) => node.id === event.node_id)) return updated
+      return [...updated, { id: event.node_id, name: event.node_name || event.node_id, lat: event.lat, lng: event.lng, status: 'critical', battery_pct: event.telemetry?.battery_pct, source: event.source }]
+    })
+  }, [raiseUrgentAlert])
 
   const loadInitial = useCallback(async () => {
     try {
@@ -43,6 +67,7 @@ function App() {
       setSettlements(settlementData)
       setGaps(gapData)
       setEvents(eventData)
+      eventData.forEach((event) => seenEventIds.current.add(event.id))
       setSelectedNode((current) => current || nodeData[0]?.id || '')
     } catch (error) {
       console.warn('API unavailable; showing the local map shell', error)
@@ -53,6 +78,25 @@ function App() {
   }, [])
 
   useEffect(() => { loadInitial() }, [loadInitial])
+
+  useEffect(() => {
+    const refreshEvents = async () => {
+      try {
+        const [eventResponse, nodeResponse] = await Promise.all([
+          fetch(`${API}/api/events?limit=60`),
+          fetch(`${API}/api/nodes`),
+        ])
+        if (!eventResponse.ok || !nodeResponse.ok) return
+        const nextEvents = await eventResponse.json()
+        nextEvents.forEach((event) => applyTelemetryEvent(event))
+        setNodes(await nodeResponse.json())
+      } catch (error) {
+        console.warn('Live event refresh failed', error)
+      }
+    }
+    const interval = window.setInterval(refreshEvents, 3000)
+    return () => window.clearInterval(interval)
+  }, [applyTelemetryEvent])
 
   useEffect(() => {
     let socket
@@ -70,18 +114,10 @@ function App() {
           const data = JSON.parse(message.data)
           if (data.type === 'snapshot') {
             setEvents(data.events || [])
+            ;(data.events || []).forEach((event) => seenEventIds.current.add(event.id))
             if (data.nodes?.length) setNodes(data.nodes)
           }
-          if (data.type === 'telemetry' && data.event) {
-            if (data.event.classification?.classification === 'event') {
-              setIncomingSignal(data.event)
-              window.setTimeout(() => setIncomingSignal(null), 9000)
-            }
-            setEvents((current) => [data.event, ...current].slice(0, 60))
-            setNodes((current) => current.map((node) => node.id === data.event.node_id
-              ? { ...node, status: data.event.classification.classification === 'normal' ? 'online' : 'critical', battery_pct: data.event.telemetry.battery_pct, last_seen: data.event.recorded_at }
-              : node))
-          }
+          if (data.type === 'telemetry' && data.event) applyTelemetryEvent(data.event)
         }
       } catch {
         setConnection('offline')
@@ -89,7 +125,7 @@ function App() {
     }
     connect()
     return () => { clearTimeout(retry); socket?.close() }
-  }, [])
+  }, [applyTelemetryEvent])
 
   const sendPhoneDetection = useCallback(async (window) => {
     if (!selectedNode) return
@@ -100,21 +136,7 @@ function App() {
     })
   }, [selectedNode])
 
-  const togglePhoneMonitoring = async () => {
-    if (phoneMonitoring) {
-      window.removeEventListener('devicemotion', onDeviceMotion)
-      setPhoneMonitoring(false)
-      return
-    }
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      const permission = await DeviceMotionEvent.requestPermission()
-      if (permission !== 'granted') return
-    }
-    window.addEventListener('devicemotion', onDeviceMotion)
-    setPhoneMonitoring(true)
-  }
-
-  function onDeviceMotion(event) {
+  const onDeviceMotion = useCallback((event) => {
     const acceleration = event.accelerationIncludingGravity
     if (!acceleration) return
     const magnitude = Math.sqrt((acceleration.x || 0) ** 2 + (acceleration.y || 0) ** 2 + (acceleration.z || 0) ** 2) - 9.8
@@ -122,10 +144,67 @@ function App() {
     const peak = Math.max(...phoneWindow.current.map((value) => Math.abs(value)))
     if (phoneWindow.current.length >= 40 && peak > 4 && Date.now() - lastPhoneAlert.current > 30000) {
       lastPhoneAlert.current = Date.now()
-      sendPhoneDetection(phoneWindow.current).catch((error) => console.warn('Phone detection relay failed', error))
+      sendPhoneDetection(phoneWindow.current).catch((error) => {
+        console.warn('Phone detection relay failed', error)
+        setPhoneStatus('Could not relay motion data to the backend.')
+      })
       phoneWindow.current = []
     }
+  }, [sendPhoneDetection])
+
+  useEffect(() => () => {
+    window.removeEventListener('devicemotion', onDeviceMotion)
+  }, [onDeviceMotion])
+
+  const togglePhoneMonitoring = async () => {
+    if (phoneMonitoring) {
+      window.removeEventListener('devicemotion', onDeviceMotion)
+      setPhoneMonitoring(false)
+      setPhoneStatus('Phone motion monitoring paused.')
+      return
+    }
+    if (typeof window.DeviceMotionEvent === 'undefined') {
+      setPhoneStatus('Motion sensors are unavailable in this browser. Open the portal on a phone.')
+      return
+    }
+    try {
+      if (typeof window.DeviceMotionEvent.requestPermission === 'function') {
+        const permission = await window.DeviceMotionEvent.requestPermission()
+        if (permission !== 'granted') {
+          setPhoneStatus('Motion permission was denied. Allow sensor access and try again.')
+          return
+        }
+      }
+    } catch (error) {
+      console.warn('Motion permission request failed', error)
+      setPhoneStatus('Motion permission could not be requested. Use HTTPS or localhost on a phone.')
+      return
+    }
+    window.addEventListener('devicemotion', onDeviceMotion)
+    setPhoneMonitoring(true)
+    setPhoneStatus('Phone motion monitoring is active.')
   }
+
+  const [modelInfo, setModelInfo] = useState({
+    model_type: 'Logistic Regression',
+    features: ['peak_amplitude','rms','zero_crossing_rate','dominant_frequency_hz','decay_envelope'],
+    training_samples: 8000,
+    validation_samples: 2000,
+    validation_accuracy: 0.9995,
+    validation_balanced_accuracy: 0.9995,
+    labels: ['normal','event'],
+    feature_importances: (() => {
+      const coeffs = [3.4654, 4.6616, -1.9588, 0.0881, 4.8281]
+      const features = ['peak_amplitude','rms','zero_crossing_rate','dominant_frequency_hz','decay_envelope']
+      const total = coeffs.reduce((s,c) => s + Math.abs(c), 0)
+      return features.map((f,i) => ({ feature: f, coefficient: coeffs[i], importance: Math.abs(coeffs[i])/total }))
+    })(),
+    note: 'Trained on synthetic vibration windows. Replace synthetic_training_data() with labelled field/USGS data for production.'
+  })
+
+  useEffect(() => {
+    fetch(`${API}/api/model`).then(r => r.json()).then(d => { if (d.validation_accuracy) setModelInfo(d) }).catch(() => {})
+  }, [])
 
   const latestByNode = useMemo(() => Object.fromEntries(events.map((event) => [event.node_id, event])), [events])
   const latestWindow = events[0]?.telemetry?.sensor_window || []
@@ -175,6 +254,8 @@ function App() {
           <Metric label="RISK WATCH" value={counts.watch + counts.critical} unit=" nodes" detail="requiring attention" accent="amber" />
           <Metric label="COVERAGE GAPS" value={gaps.length || '—'} unit=" zones" detail="blind spots in corridor" accent="red" />
           <Metric label="LAST SIGNAL" value={events[0] ? formatTime(events[0].recorded_at) : '—'} detail={events[0]?.node_name || 'Awaiting telemetry'} accent="blue" />
+          <Metric label="ESP32 SIGNALS" value={events.filter(e => e.source === 'esp32_node').length} unit=" total" detail={events.find(e => e.source === 'esp32_node') ? formatTime(events.find(e => e.source === 'esp32_node').recorded_at) : 'none yet'} accent="teal" />
+          <Metric label="PHONE SIGNALS" value={events.filter(e => e.source === 'phone_layer').length} unit=" total" detail={events.find(e => e.source === 'phone_layer') ? formatTime(events.find(e => e.source === 'phone_layer').recorded_at) : 'none yet'} accent="teal" />
         </div>
         <div className="dashboard-grid">
           <section id="corridor-gis" className="map-card panel">
@@ -194,17 +275,87 @@ function App() {
             </div>
           </section>
           <aside className="side-column">
-            <section id="ml-telemetry" className="panel waveform"><div className="panel-head"><div><p className="eyebrow">LIVE VIBRATION / 02</p><h2>Sensor waveform</h2></div><span className="unit">AMPLITUDE</span></div><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#45c5c1" stopOpacity={0.45} /><stop offset="95%" stopColor="#45c5c1" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="2 5" stroke="#28404a" /><XAxis dataKey="index" tick={{ fill: '#6e898e', fontSize: 9 }} /><YAxis tick={{ fill: '#6e898e', fontSize: 9 }} width={28} /><Tooltip contentStyle={{ background: '#0c202b', border: '1px solid #2e5159', fontSize: 11 }} /><Area type="monotone" dataKey="amplitude" stroke="#45c5c1" fill="url(#water)" strokeWidth={2} name="vibration" /></AreaChart></ResponsiveContainer></div><div className="chart-footer"><span><b className="teal">{events[0]?.classification?.classification || '—'}</b> · {events[0]?.classification?.confidence ? `${Math.round(events[0].classification.confidence * 100)}% confidence` : 'awaiting signal'}</span><span>{latestWindow.length || 0} samples buffered</span></div></section>
+            <section id="ml-telemetry" className="panel waveform"><div className="panel-head"><div><p className="eyebrow">LIVE VIBRATION / 02</p><h2>Sensor waveform</h2></div><span className="unit">AMPLITUDE</span></div><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#45c5c1" stopOpacity={0.45} /><stop offset="95%" stopColor="#45c5c1" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="2 5" stroke="#28404a" /><XAxis dataKey="index" tick={{ fill: '#6e898e', fontSize: 9 }} /><YAxis tick={{ fill: '#6e898e', fontSize: 9 }} width={28} /><Tooltip contentStyle={{ background: '#0c202b', border: '1px solid #2e5159', fontSize: 11 }} /><Area type="monotone" dataKey="amplitude" stroke="#45c5c1" fill="url(#water)" strokeWidth={2} name="vibration" /></AreaChart></ResponsiveContainer></div>
+              <div className="chart-footer">
+                <span><b className="teal">{events[0]?.classification?.classification || '—'}</b> · {events[0]?.classification?.confidence ? `${Math.round(events[0].classification.confidence * 100)}% confidence` : 'awaiting signal'}</span>
+                <span style={{color: events[0]?.source === 'phone_layer' ? '#5d9cec' : '#45c5c1'}}>{events[0]?.source === 'phone_layer' ? '📱 PHONE' : events[0]?.source === 'esp32_node' ? '⌁ ESP32' : '—'}</span>
+                <span>{latestWindow.length || 0} samples</span>
+              </div>
+              {events[0]?.classification?.features && <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'4px',marginTop:'8px',fontSize:'10px',color:'#6e898e'}}>
+                <span>peak: <b style={{color:'#e0e8f5'}}>{events[0].classification.features.peak_amplitude?.toFixed(3)}</b></span>
+                <span>rms: <b style={{color:'#e0e8f5'}}>{events[0].classification.features.rms?.toFixed(3)}</b></span>
+                <span>zcr: <b style={{color:'#e0e8f5'}}>{events[0].classification.features.zero_crossing_rate?.toFixed(3)}</b></span>
+                <span>fft: <b style={{color:'#e0e8f5'}}>{events[0].classification.features.dominant_freq_hz?.toFixed(1)}Hz</b></span>
+                <span>dur: <b style={{color:'#e0e8f5'}}>{events[0].classification.features.duration_s?.toFixed(2)}s</b></span>
+                <span>decay: <b style={{color:'#e0e8f5'}}>{events[0].classification.features.decay_envelope?.toFixed(3)}</b></span>
+              </div>}
+            </section>
             <section className="panel node-list"><div className="panel-head"><div><p className="eyebrow">FIELD DEVICES / 03</p><h2>Node health</h2></div><span className="unit">{nodes.length} total</span></div><div className="nodes">{loading ? <div className="empty">Loading corridor data…</div> : nodes.map((node) => <button className={`node-row ${selectedNode === node.id ? 'selected' : ''}`} key={node.id} onClick={() => setSelectedNode(node.id)}><span className={`node-icon ${tone(latestByNode[node.id]?.classification?.classification || 'normal')}`}>⌁</span><span className="node-info"><b>{node.name}</b><small>{node.id} · {node.last_seen ? formatTime(node.last_seen) : 'no signal'}</small></span><span className="battery">{Math.round(node.battery_pct || 0)}%</span><i className={`status-dot ${node.status === 'offline' ? 'off' : ''}`} /></button>)}</div></section>
           </aside>
         </div>
         <section className="bottom-grid">
-          <section id="system-logs" className="panel event-feed"><div className="panel-head"><div><p className="eyebrow">DECISION LOG / 04</p><h2>Recent signal interpretations</h2></div><span className="model-tag">MODEL · LOGISTIC REGRESSION</span></div>{events.length ? <div className="events">{events.slice(0, 5).map((event) => <div className="event" key={event.id}><span className={`event-badge ${tone(event.classification.classification)}`}>{event.classification.classification}</span><span className="event-node"><b>{event.node_name}</b><small>{event.source === 'phone_layer' ? 'PHONE LAYER' : 'ESP32 NODE'} · {event.confirmation}</small></span><span className="event-reading">{Math.round((event.classification.confidence || 0) * 100)}<small>% confidence</small></span><span className="event-reason">{event.classification.features?.peak_amplitude?.toFixed(2)} peak amplitude</span><time>{formatTime(event.recorded_at)}</time></div>)}</div> : <div className="empty">No telemetry yet. Use the simulator to create a signal.</div>}</section>
-          <section id="cascade-simulation" className="panel simulator"><p className="eyebrow">DEMO CONTROL / 05</p><h2>Send a signal</h2><p>Inject synthetic sensor data and watch the model classify it in real time.</p><label>NODE<select value={selectedNode} onChange={(e) => setSelectedNode(e.target.value)}>{nodes.map((node) => <option key={node.id} value={node.id}>{node.id} · {node.name}</option>)}</select></label><label>SCENARIO<select value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="random">Random conditions</option><option value="normal">Normal river</option><option value="watch">Rising water</option><option value="critical">Flood threshold</option></select></label><button className="simulate" onClick={simulate}>Transmit ESP32 test signal <span>↗</span></button><button className={`simulate phone-button ${phoneMonitoring ? 'active' : ''}`} onClick={togglePhoneMonitoring}>{phoneMonitoring ? 'Stop phone motion monitor' : 'Enable phone motion monitor'} <span>⌁</span></button><small className="source-note">ESP32 and phone are independent detection sources. Alerts within 30 seconds are cross-confirmed.</small></section>
+          <section id="system-logs" className="panel event-feed"><div className="panel-head"><div><p className="eyebrow">DECISION LOG / 04</p><h2>Recent signal interpretations</h2></div><span className="model-tag">MODEL · LOGISTIC REGRESSION</span></div>
+            <div style={{display:'flex',gap:'12px',marginBottom:'10px'}}>
+              <span style={{fontSize:'11px',padding:'3px 10px',borderRadius:'12px',background:'rgba(69,197,193,0.15)',color:'#45c5c1',border:'1px solid rgba(69,197,193,0.3)'}}>⌁ ESP32 NODE</span>
+              <span style={{fontSize:'11px',padding:'3px 10px',borderRadius:'12px',background:'rgba(93,156,236,0.15)',color:'#5d9cec',border:'1px solid rgba(93,156,236,0.3)'}}>📱 PHONE LAYER</span>
+              <span style={{fontSize:'11px',padding:'3px 10px',borderRadius:'12px',background:'rgba(240,184,91,0.15)',color:'#f0b85b',border:'1px solid rgba(240,184,91,0.3)'}}>⚡ CROSS-CONFIRMED</span>
+            </div>
+            {events.length ? <div className="events">{events.slice(0, 12).map((event) => <div className="event" key={event.id} style={{borderLeft: `3px solid ${event.source === 'phone_layer' ? '#5d9cec' : '#45c5c1'}`, paddingLeft:'8px', marginBottom:'6px'}}>
+              <span className={`event-badge ${tone(event.classification.classification)}`}>{event.classification.classification}</span>
+              <span className="event-node">
+                <b>{event.node_name}</b>
+                <small style={{color: event.source === 'phone_layer' ? '#5d9cec' : '#45c5c1'}}>{event.source === 'phone_layer' ? '📱 PHONE LAYER' : '⌁ ESP32 NODE'}{event.confirmation === 'cross-confirmed' ? ' · ⚡ CROSS-CONFIRMED' : ''}</small>
+              </span>
+              <span className="event-reading">{Math.round((event.classification.confidence || 0) * 100)}<small>% conf</small></span>
+              <span className="event-reason" style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                <span>{event.classification.features?.peak_amplitude?.toFixed(3)} peak amp</span>
+                {event.telemetry?.water_level_cm > 0 && <span style={{color:'#5d9cec',fontSize:'10px'}}>💧 {event.telemetry.water_level_cm}cm water</span>}
+                {event.telemetry?.rainfall_mm > 0 && <span style={{color:'#5d9cec',fontSize:'10px'}}>🌧 {event.telemetry.rainfall_mm}mm rain</span>}
+                {event.telemetry?.battery_pct && <span style={{color:'#6e898e',fontSize:'10px'}}>🔋 {event.telemetry.battery_pct}%</span>}
+              </span>
+              <time>{formatTime(event.recorded_at)}</time>
+            </div>)}</div> : <div className="empty">No telemetry yet. Use the simulator to create a signal.</div>}
+          </section>
+          <section id="cascade-simulation" className="panel simulator"><p className="eyebrow">DEMO CONTROL / 05</p><h2>Send a signal</h2><p>Inject synthetic sensor data and watch the model classify it in real time.</p><label>NODE<select value={selectedNode} onChange={(e) => setSelectedNode(e.target.value)}>{nodes.map((node) => <option key={node.id} value={node.id}>{node.id} · {node.name}</option>)}</select></label><label>SCENARIO<select value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="random">Random conditions</option><option value="normal">Normal river</option><option value="watch">Rising water</option><option value="critical">Flood threshold</option></select></label><button className="simulate" onClick={simulate}>Transmit ESP32 test signal <span>↗</span></button><button className={`simulate phone-button ${phoneMonitoring ? 'active' : ''}`} onClick={togglePhoneMonitoring}>{phoneMonitoring ? 'Stop phone motion monitor' : 'Enable phone motion monitor'} <span>⌁</span></button>{phoneStatus && <small className="source-note phone-status">{phoneStatus}</small>}<small className="source-note">ESP32 and phone are independent detection sources. Alerts within 30 seconds are cross-confirmed.</small></section>
         </section>
       </section>
-      <footer><span>BHUDRISHTI / OPEN FIELD PROTOTYPE</span><span>Explainable intelligence for the last mile</span><span>API {API.replace(/^https?:\/\//, '')}</span></footer>
-    </main>
+        {modelInfo && modelInfo.validation_accuracy && <section className="model-intelligence" style={{margin:'0 0 24px',borderRadius:'12px',padding:'20px 24px'}}>
+          <p className="eyebrow" style={{marginBottom:'8px'}}>ML INTELLIGENCE / 06</p>
+          <h2 style={{fontSize:'18px',marginBottom:'16px',color:'#e0e8f5'}}>Model Metrics &amp; Feature Importances</h2>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px',marginBottom:'20px'}}>
+            {[
+              ['Model Type', (modelInfo.model_type || '').replace(' (sklearn)','')],
+              ['Accuracy', (modelInfo.validation_accuracy * 100).toFixed(2) + '%'],
+              ['Balanced Accuracy', (modelInfo.validation_balanced_accuracy * 100).toFixed(2) + '%'],
+              ['Training Samples', modelInfo.training_samples?.toLocaleString()],
+              ['Validation Samples', modelInfo.validation_samples?.toLocaleString()],
+              ['Classes', modelInfo.labels?.join(' / ')],
+            ].map(([label, value]) => (
+              <div className="model-stat" key={label} style={{borderRadius:'8px',padding:'10px 12px'}}>
+                <div style={{fontSize:'10px',color:'#6e898e',textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:'4px'}}>{label}</div>
+                <div style={{fontSize:'16px',fontWeight:'700',color:'#45c5c1'}}>{value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="feature-heading" style={{marginBottom:'8px',fontSize:'11px',textTransform:'uppercase',letterSpacing:'1px'}}>Feature Importances (normalised |coefficient|)</div>
+          <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+            {[...(modelInfo.feature_importances || [])].sort((a,b) => b.importance - a.importance).map(fi => (
+              <div key={fi.feature} style={{display:'grid',gridTemplateColumns:'180px 1fr 60px 60px',alignItems:'center',gap:'8px'}}>
+                <span className="feature-name" style={{fontSize:'12px',fontFamily:'monospace'}}>{fi.feature}</span>
+                <div style={{height:'8px',background:'#1e3a4a',borderRadius:'4px',overflow:'hidden'}}>
+                  <div style={{height:'100%',width:(fi.importance*100)+'%',background: fi.coefficient > 0 ? '#e74c3c' : '#45c5c1',borderRadius:'4px',transition:'width .3s'}} />
+                </div>
+                <span style={{fontSize:'11px',color:'#6e898e',textAlign:'right'}}>{(fi.importance*100).toFixed(1)}%</span>
+                <span style={{fontSize:'11px',color: fi.coefficient > 0 ? '#e74c3c' : '#45c5c1',textAlign:'right',fontFamily:'monospace'}}>{fi.coefficient > 0 ? '+' : ''}{fi.coefficient}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:'12px',fontSize:'11px',color:'#6e898e',fontStyle:'italic',borderTop:'1px solid #1e3a4a',paddingTop:'10px'}}>{modelInfo.note}</div>
+          <div style={{marginTop:'8px',fontSize:'11px',color:'#6e898e'}}>
+            Red bars = increases event probability · Teal bars = decreases event probability
+          </div>
+        </section>}
+      <footer><span>BHUDRISHTI / OPEN FIELD PROTOTYPE</span><span>Explainable intelligence for the last mile</span><span>API {API.replace(/^https?:\/\//, '')}</span></footer>    </main>
   )
 }
 
@@ -280,13 +431,13 @@ function GlobeStudyCanvas({ nodes, settlements }) {
         const travel = (time / 2600 + index * .16) % 1
         const px = point.x + (next.x - point.x) * travel
         const py = point.y + (next.y - point.y) * travel
-        context.fillStyle = '#ffffff'; context.shadowColor = '#64e4d6'; context.shadowBlur = 8
+        context.fillStyle = '#ffffff'; context.shadowColor = '#ffffff'; context.shadowBlur = 8
         context.beginPath(); context.arc(center.x + px * radius, center.y - py * radius, 2, 0, Math.PI * 2); context.fill(); context.shadowBlur = 0
       })
       visible.sort((a, b) => a.z - b.z).forEach(({ x, y, z, point }) => {
         const px = center.x + x * radius
         const py = center.y - y * radius
-        const color = point.kind === 'node' ? (point.status === 'offline' ? '#ff5e5e' : '#64e4d6') : '#f2b95f'
+        const color = point.kind === 'node' ? (point.status === 'offline' ? '#ff5e5e' : '#ffffff') : '#f2b95f'
         const pulse = (Math.sin(time / 420 + point.lat) + 1) / 2
         context.fillStyle = color; context.shadowColor = color; context.shadowBlur = 8 * z
         context.beginPath(); context.arc(px, py, point.kind === 'node' ? 2.4 : 1.6, 0, Math.PI * 2); context.fill()
@@ -335,7 +486,7 @@ function PixelSignalCard({ event, onDismiss }) {
   return <div className="signal-alert-layer" role="alert">
     <article className="pixel-card">
       <div className="pixel-card-glow" />
-      <div className="pixel-card-header"><span className="signal-kicker"><i /> INCOMING SIGNAL</span><button onClick={onDismiss} aria-label="Dismiss alert">×</button></div>
+      <div className="pixel-card-header"><span className="signal-kicker"><i /> URGENT · {source}</span><button onClick={onDismiss} aria-label="Dismiss alert">×</button></div>
       <div className="pixel-card-icon">!</div>
       <p className="eyebrow">COLLAPSE SIGNATURE DETECTED</p>
       <h2>{event.node_name}</h2>

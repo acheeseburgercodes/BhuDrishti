@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BhuDrishti · Flood Corridor Monitor</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121820;
+    --panel-2: #0e141b;
+    --border: #1e2a36;
+    --text: #e6edf3;
+    --muted: #7d8b99;
+    --accent: #38bdf8;
+    --esp: #2dd4bf;
+    --phone: #60a5fa;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --crit: #f87171;
+    --radius: 12px;
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+    padding: 20px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: .3px; }
+  .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  .brand small { color: var(--muted); font-size: .78rem; display: block; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: .85rem; cursor: pointer;
+    transition: all .15s; font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); color: #041016; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); color: #041016; }
+  button.active { background: var(--accent); color: #041016; border-color: var(--accent); }
+  .tag { font-size: .7rem; color: var(--muted); }
+  input {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: .8rem; font-family: inherit; width: 210px;
+  }
+  .grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .panel h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted); margin-bottom: 12px; font-weight: 600; }
+
+  /* ---- Simulation stage ---- */
+  .stage { position: relative; height: 300px; background: var(--panel-2); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .node {
+    position: absolute; width: 88px; text-align: center; transform: translate(-50%,-50%);
+    transition: filter .2s;
+  }
+  .node .icon {
+    width: 56px; height: 56px; margin: 0 auto 6px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+    background: #0b1218; border: 2px solid var(--border); transition: all .3s;
+  }
+  .node .lbl { font-size: .68rem; color: var(--muted); line-height: 1.25; }
+  .node.hot .icon { border-color: var(--crit); box-shadow: 0 0 22px rgba(248,113,113,.6); transform: scale(1.08); }
+  .node.tx .icon { border-color: var(--accent); box-shadow: 0 0 22px rgba(56,189,248,.6); }
+  .node.ok .icon { border-color: var(--ok); box-shadow: 0 0 18px rgba(52,211,153,.45); }
+
+  #esp   { left: 14%; top: 32%; }
+  #phone { left: 14%; top: 74%; }
+  #laptop{ left: 50%; top: 53%; }
+  #cloud { left: 85%; top: 32%; }
+  #dash  { left: 85%; top: 74%; }
+
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .wire { stroke: var(--border); stroke-width: 2; fill: none; }
+  .packet { fill: var(--accent); filter: drop-shadow(0 0 6px var(--accent)); opacity: 0; }
+  .packet.phone { fill: var(--phone); filter: drop-shadow(0 0 6px var(--phone)); }
+  .packet.esp { fill: var(--esp); filter: drop-shadow(0 0 6px var(--esp)); }
+
+  .caption {
+    position: absolute; bottom: 10px; left: 12px; right: 12px; text-align: center;
+    font-size: .8rem; color: var(--accent); background: rgba(8,12,16,.75);
+    padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+    min-height: 30px; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ---- Waveform ---- */
+  canvas#wave { width: 100%; height: 120px; display: block; background: var(--panel-2); border-radius: 8px; border: 1px solid var(--border); }
+  .metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 12px; }
+  .metric { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .metric .k { font-size: .62rem; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .metric .v { font-size: 1.05rem; font-weight: 600; margin-top: 2px; }
+
+  /* ---- Verdict ---- */
+  .verdict { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); margin-top: 12px; }
+  .verdict .badge { font-size: 1.5rem; }
+  .verdict .txt .state { font-size: 1.1rem; font-weight: 700; }
+  .verdict .txt .sub { font-size: .75rem; color: var(--muted); }
+  .verdict.event { border-color: var(--crit); }
+  .verdict.event .state { color: var(--crit); }
+  .verdict.normal { border-color: var(--ok); }
+  .verdict.normal .state { color: var(--ok); }
+
+  /* ---- Event feed ---- */
+  .feed { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+  .evt { border-left: 3px solid var(--border); background: var(--panel-2); border-radius: 0 8px 8px 0; padding: 9px 12px; font-size: .8rem; animation: slidein .3s ease; }
+  @keyframes slidein { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+  .evt.esp { border-left-color: var(--esp); }
+  .evt.phone { border-left-color: var(--phone); }
+  .evt .row1 { display: flex; justify-content: space-between; align-items: center; }
+  .evt .src { font-size: .62rem; text-transform: uppercase; letter-spacing: .6px; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+  .evt.esp .src { background: rgba(45,212,191,.15); color: var(--esp); }
+  .evt.phone .src { background: rgba(96,165,250,.15); color: var(--phone); }
+  .evt .cls { font-weight: 600; }
+  .evt .cls.event { color: var(--crit); }
+  .evt .cls.normal { color: var(--ok); }
+  .evt .meta { color: var(--muted); font-size: .7rem; margin-top: 3px; }
+  .evt .xconf { color: var(--warn); font-size: .65rem; }
+
+  /* ---- Corridor mini-map ---- */
+  .map { position: relative; height: 220px; background: linear-gradient(160deg,#0d1620,#0b1017); border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
+  .river { position: absolute; inset: 0; }
+  .mnode { position: absolute; transform: translate(-50%,-50%); text-align: center; }
+  .mnode .pin { width: 12px; height: 12px; border-radius: 50%; margin: 0 auto; border: 2px solid #0b1017; }
+  .mnode.online .pin { background: var(--ok); }
+  .mnode.warning .pin { background: var(--warn); }
+  .mnode.offline .pin { background: var(--muted); }
+  .mnode.critical .pin { background: var(--crit); box-shadow: 0 0 12px var(--crit); animation: pulse 1s infinite; }
+  .mnode .mlbl { font-size: .58rem; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+  .ripple { position: absolute; border: 2px solid var(--crit); border-radius: 50%; transform: translate(-50%,-50%); animation: ripple 1.6s ease-out infinite; pointer-events: none; }
+  @keyframes ripple { from { width: 0; height: 0; opacity: .8; } to { width: 120px; height: 120px; opacity: 0; } }
+
+  /* ---- Model panel ---- */
+  .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: .72rem; }
+  .bar .name { width: 130px; color: var(--muted); }
+  .bar .track { flex: 1; height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 4px; }
+  .bar .val { width: 46px; text-align: right; font-variant-numeric: tabular-nums; }
+  .modelstats { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 14px; }
+
+  footer { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .72rem; text-align: center; }
+  .status-pill { font-size: .7rem; padding: 3px 9px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); }
+  .status-pill.live { color: var(--ok); border-color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot"></span>
+    <div>
+      <h1>BhuDrishti</h1>
+      <small>GLOF / Flash-flood early-warning · Trishuli–Bhote Koshi corridor</small>
+    </div>
+  </div>
+  <div class="controls">
+    <span id="conn" class="status-pill">simulation</span>
+    <input id="apiUrl" placeholder="http://localhost:8000 (optional)" />
+    <button id="btnConnect">Connect backend</button>
+    <button id="btnSim" class="primary active">▶ Run simulation</button>
+  </div>
+</header>
+
+<div class="grid">
+  <!-- LEFT: Simulation + waveform -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="panel">
+      <h2>Live Data-flow Simulation</h2>
+      <div class="stage">
+        <svg class="wires" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <!-- esp -> laptop -->
+          <path id="w_esp" class="wire" d="M14,32 C32,32 34,53 50,53" />
+          <!-- phone -> laptop -->
+          <path id="w_phone" class="wire" d="M14,74 C32,74 34,53 50,53" />
+          <!-- laptop -> cloud -->
+          <path id="w_cloud" class="wire" d="M50,53 C68,53 70,32 85,32" />
+          <!-- laptop -> dash -->
+          <path id="w_dash" class="wire" d="M50,53 C68,53 70,74 85,74" />
+          <circle class="packet esp"   id="p_esp"   r="1.6" />
+          <circle class="packet phone" id="p_phone" r="1.6" />
+          <circle class="packet"       id="p_cloud" r="1.6" />
+          <circle class="packet"       id="p_dash"  r="1.6" />
+        </svg>
+        <div class="node ok" id="esp">
+          <div class="icon">⌁</div><div class="lbl">ESP32 Node<br>GLOF_Bridge AP</div>
+        </div>
+        <div class="node ok" id="phone">
+          <div class="icon">📱</div><div class="lbl">Phone Layer<br>accelerometer</div>
+        </div>
+        <div class="node ok" id="laptop">
+          <div class="icon">💻</div><div class="lbl">Laptop<br>FastAPI :8000</div>
+        </div>
+        <div class="node ok" id="cloud">
+          <div class="icon">☁</div><div class="lbl">Supabase<br>persistence</div>
+        </div>
+        <div class="node ok" id="dash">
+          <div class="icon">📊</div><div class="lbl">Dashboard<br>WebSocket live</div>
+        </div>
+        <div class="caption" id="caption">System idle · press Run simulation</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Sensor Window · <span id="waveSrc" style="color:var(--muted)">—</span></h2>
+      <canvas id="wave" width="640" height="120"></canvas>
+      <div class="metrics">
+        <div class="metric"><div class="k">Peak amp</div><div class="v" id="m_peak">—</div></div>
+        <div class="metric"><div class="k">RMS</div><div class="v" id="m_rms">—</div></div>
+        <div class="metric"><div class="k">Zero-cross</div><div class="v" id="m_zcr">—</div></div>
+        <div class="metric"><div class="k">Dom freq</div><div class="v" id="m_freq">—</div></div>
+        <div class="metric"><div class="k">Decay env</div><div class="v" id="m_decay">—</div></div>
+        <div class="metric"><div class="k">Samples</div><div class="v" id="m_n">—</div></div>
+      </div>
+      <div class="verdict normal" id="verdict">
+        <div class="badge" id="v_badge">🟢</div>
+        <div class="txt">
+          <div class="state" id="v_state">Awaiting signal</div>
+          <div class="sub" id="v_sub">Classifier idle</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Map + feed + model -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="panel">
+      <h2>Corridor Map</h2>
+      <div class="map" id="map">
+        <svg class="river" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <path d="M20,4 C30,20 24,38 40,52 C56,66 50,84 68,96" stroke="#1c3242" stroke-width="3" fill="none" opacity="0.8"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Event Feed</h2>
+      <div class="feed" id="feed">
+        <div class="evt"><div class="meta">No events yet — run the simulation or connect the backend.</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>ML Model · Logistic Regression</h2>
+      <div class="modelstats">
+        <div class="metric"><div class="k">Accuracy</div><div class="v" id="ml_acc">99.95%</div></div>
+        <div class="metric"><div class="k">Bal. accuracy</div><div class="v" id="ml_bacc">99.95%</div></div>
+        <div class="metric"><div class="k">Train samples</div><div class="v" id="ml_train">8,000</div></div>
+        <div class="metric"><div class="k">Val samples</div><div class="v" id="ml_val">2,000</div></div>
+      </div>
+      <div id="mlbars"></div>
+      <div class="tag" style="margin-top:8px">Weights from <code>model_artifact.json</code>. Synthetic training data — replace with labelled field/USGS windows for production.</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  BhuDrishti prototype · ESP32 (WiFi SoftAP + BLE) → Laptop FastAPI → WebSocket dashboard · classification via 5-feature logistic regression
+</footer>
+
+<script>
+"use strict";
+// ─────────────────────────────────────────────────────────────────────────
+// Model artifact (embedded from backend/model_artifact.json so the portal
+// always shows real weights even offline).
+// ─────────────────────────────────────────────────────────────────────────
+const MODEL = {
+  features: ["peak_amplitude","rms","zero_crossing_rate","dominant_frequency_hz","decay_envelope"],
+  coefficients: [3.4654, 4.6616, -1.9588, 0.0881, 4.8281],
+  accuracy: 0.9995, balanced: 0.9995, train: 8000, val: 2000
+};
+
+// Nodes from the seed data (normalised x/y for the mini-map).
+const NODES = [
+  {id:"BD-001", name:"Rasuwa Gate",     x:22, y:8,  status:"online"},
+  {id:"BD-002", name:"Syabrubesi",      x:30, y:26, status:"online"},
+  {id:"BD-003", name:"Dhunche",         x:38, y:40, status:"warning"},
+  {id:"BD-004", name:"Rasuwagadhi",     x:52, y:34, status:"online"},
+  {id:"BD-005", name:"Trishuli Bazaar", x:50, y:62, status:"offline"},
+  {id:"BD-006", name:"Betrawati",       x:60, y:78, status:"online"},
+  {id:"BD-007", name:"Nuwakot D/S",     x:68, y:92, status:"online"}
+];
+
+// ── DOM refs ──
+const $ = (id) => document.getElementById(id);
+const caption = $("caption");
+const feed = $("feed");
+const waveCanvas = $("wave");
+const wctx = waveCanvas.getContext("2d");
+
+// ─────────────────────────────────────────────────────────────────────────
+// Render model bars + map once.
+// ─────────────────────────────────────────────────────────────────────────
+function renderModel() {
+  const abs = MODEL.coefficients.map(Math.abs);
+  const total = abs.reduce((a,b)=>a+b,0) || 1;
+  const rows = MODEL.features.map((f,i)=>({f, c: MODEL.coefficients[i], imp: abs[i]/total}))
+                             .sort((a,b)=>b.imp-a.imp);
+  const maxImp = Math.max(...rows.map(r=>r.imp));
+  $("mlbars").innerHTML = rows.map(r=>{
+    const w = (r.imp/maxImp*100).toFixed(0);
+    const col = r.c >= 0 ? "var(--crit)" : "var(--esp)";
+    return `<div class="bar">
+      <span class="name">${r.f}</span>
+      <span class="track"><span class="fill" style="width:${w}%;background:${col}"></span></span>
+      <span class="val">${r.c.toFixed(2)}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderMap() {
+  const map = $("map");
+  NODES.forEach(n=>{
+    const el = document.createElement("div");
+    el.className = `mnode ${n.status}`;
+    el.id = `mn_${n.id}`;
+    el.style.left = n.x + "%";
+    el.style.top = n.y + "%";
+    el.innerHTML = `<div class="pin"></div><div class="mlbl">${n.name}</div>`;
+    map.appendChild(el);
+  });
+}
+
+function flashMapNode(id, isEvent) {
+  const el = $(`mn_${id}`);
+  if (!el) return;
+  const prev = el.className;
+  if (isEvent) {
+    el.className = "mnode critical";
+    const rip = document.createElement("div");
+    rip.className = "ripple";
+    rip.style.left = el.style.left; rip.style.top = el.style.top;
+    $("map").appendChild(rip);
+    setTimeout(()=>rip.remove(), 1600);
+    setTimeout(()=>{ el.className = prev; }, 3000);
+  }
+}
+
+renderModel();
+renderMap();
+
+// ─────────────────────────────────────────────────────────────────────────
+// Feature extraction (mirrors backend/model.py so the portal classifies the
+// same way when running offline).
+// ─────────────────────────────────────────────────────────────────────────
+function extractFeatures(w) {
+  const n = w.length;
+  const peak = Math.max(...w.map(Math.abs));
+  const rms = Math.sqrt(w.reduce((a,v)=>a+v*v,0)/n);
+  let zc = 0;
+  for (let i=1;i<n;i++) if ((w[i-1]<0&&w[i]>=0)||(w[i-1]>=0&&w[i]<0)) zc++;
+  const zcr = zc/n;
+  // crude dominant frequency via zero-cross rate * fs/2
+  const fs = 100;
+  const domFreq = zcr * fs / 2;
+  // decay envelope: ratio of first-quarter energy to last-quarter energy
+  const q = Math.floor(n/4);
+  const head = w.slice(0,q).reduce((a,v)=>a+Math.abs(v),0)/q;
+  const tail = w.slice(-q).reduce((a,v)=>a+Math.abs(v),0)/q || 1e-6;
+  const decay = Math.min(3, head/tail);
+  return {peak, rms, zcr, domFreq, decay};
+}
+
+function classifyLocal(w) {
+  const f = extractFeatures(w);
+  const mean =  [0.7731,0.2126,0.3912,14.8677,0.4319];
+  const scale = [0.6318,0.1581,0.1190,13.6752,0.3742];
+  const coef =  MODEL.coefficients;
+  const intercept = 4.4859;
+  const x = [f.peak,f.rms,f.zcr,f.domFreq,f.decay];
+  let z = intercept;
+  for (let i=0;i<5;i++) z += coef[i]*((x[i]-mean[i])/scale[i]);
+  const p = 1/(1+Math.exp(-z));
+  return { classification: p>=0.5 ? "event":"normal", confidence: +(p>=0.5?p:1-p).toFixed(4), features: f };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Synthetic window generator (matches backend simulate-event shape).
+// ─────────────────────────────────────────────────────────────────────────
+function makeWindow(kind) {
+  const N = 160, out = [];
+  for (let i=0;i<N;i++) {
+    const t = i/100;
+    let v = (Math.random()-0.5)*0.12; // ambient noise
+    if (kind === "event") {
+      const amp = 1.2 + Math.random()*0.5;
+      v += amp * Math.sin(2*Math.PI*18*t) * Math.exp(-3*Math.max(t-0.08,0));
+    } else if (kind === "watch") {
+      v += 0.8 * Math.sin(2*Math.PI*15*t) * Math.exp(-3.5*Math.max(t-0.08,0));
+    }
+    out.push(+v.toFixed(4));
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Waveform drawing (animated sweep).
+// ─────────────────────────────────────────────────────────────────────────
+function drawWave(w, color, progress=1) {
+  const cv = waveCanvas, c = wctx;
+  const W = cv.width, H = cv.height, mid = H/2;
+  c.clearRect(0,0,W,H);
+  // grid
+  c.strokeStyle = "#16202b"; c.lineWidth = 1;
+  for (let y=0;y<=4;y++){ const yy=y*H/4; c.beginPath(); c.moveTo(0,yy); c.lineTo(W,yy); c.stroke(); }
+  c.strokeStyle = "#22303d"; c.beginPath(); c.moveTo(0,mid); c.lineTo(W,mid); c.stroke();
+  // signal
+  const maxA = Math.max(0.5, Math.max(...w.map(Math.abs)));
+  const shown = Math.floor(w.length*progress);
+  c.strokeStyle = color; c.lineWidth = 1.8; c.beginPath();
+  for (let i=0;i<shown;i++){
+    const x = i/(w.length-1)*W;
+    const y = mid - (w[i]/maxA)*(mid*0.85);
+    i===0 ? c.moveTo(x,y) : c.lineTo(x,y);
+  }
+  c.stroke();
+  // sweep head
+  if (progress<1 && shown>0){
+    const x = (shown-1)/(w.length-1)*W;
+    c.fillStyle = color; c.beginPath(); c.arc(x, mid-(w[shown-1]/maxA)*(mid*0.85),3,0,7); c.fill();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UI updates for a classified event.
+// ─────────────────────────────────────────────────────────────────────────
+function showVerdict(cls, conf, xconf) {
+  const v = $("verdict");
+  v.className = "verdict " + cls;
+  $("v_badge").textContent = cls === "event" ? "🔴" : "🟢";
+  $("v_state").textContent = cls === "event" ? "EVENT DETECTED" : "Normal";
+  $("v_sub").textContent = `confidence ${(conf*100).toFixed(1)}%` + (xconf ? " · cross-confirmed (+15%)" : "");
+}
+
+function showFeatures(f, n) {
+  $("m_peak").textContent = f.peak.toFixed(3);
+  $("m_rms").textContent = f.rms.toFixed(3);
+  $("m_zcr").textContent = f.zcr.toFixed(3);
+  $("m_freq").textContent = f.domFreq.toFixed(1) + " Hz";
+  $("m_decay").textContent = f.decay.toFixed(2);
+  $("m_n").textContent = n;
+}
+
+function addEvent(source, nodeId, nodeName, cls, conf, xconf) {
+  const isFirst = feed.querySelector(".evt .meta")?.textContent.includes("No events");
+  if (isFirst) feed.innerHTML = "";
+  const el = document.createElement("div");
+  el.className = "evt " + (source === "phone_layer" ? "phone" : "esp");
+  const srcLabel = source === "phone_layer" ? "📱 PHONE" : "⌁ ESP32";
+  const time = new Date().toLocaleTimeString();
+  el.innerHTML = `
+    <div class="row1">
+      <span class="src">${srcLabel}</span>
+      <span class="cls ${cls}">${cls === "event" ? "EVENT" : "normal"} · ${(conf*100).toFixed(0)}%</span>
+    </div>
+    <div class="meta">${nodeName} (${nodeId}) · ${time}
+      ${xconf ? '<span class="xconf">✓ cross-confirmed</span>' : ''}</div>`;
+  feed.insertBefore(el, feed.firstChild);
+  while (feed.children.length > 14) feed.removeChild(feed.lastChild);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Packet animation along an SVG path.
+// ─────────────────────────────────────────────────────────────────────────
+function animatePacket(pathId, packetId, dur, cb) {
+  const path = $(pathId), pkt = $(packetId);
+  const len = path.getTotalLength();
+  pkt.style.opacity = 1;
+  const start = performance.now();
+  function step(now){
+    const t = Math.min(1, (now-start)/dur);
+    const pt = path.getPointAtLength(t*len);
+    pkt.setAttribute("cx", pt.x); pkt.setAttribute("cy", pt.y);
+    if (t<1) requestAnimationFrame(step);
+    else { pkt.style.opacity = 0; cb && cb(); }
+  }
+  requestAnimationFrame(step);
+}
+
+function setNodeState(id, state) {
+  const el = $(id);
+  el.className = "node" + (state ? " " + state : " ok");
+}
+
+const sleep = (ms) => new Promise(r=>setTimeout(r,ms));
+
+// ─────────────────────────────────────────────────────────────────────────
+// Full simulation cycle: detect → transmit → classify → persist → display.
+// ─────────────────────────────────────────────────────────────────────────
+let simRunning = false;
+let simTimer = null;
+
+async function runCycle() {
+  // Decide scenario
+  const roll = Math.random();
+  const kind = roll < 0.45 ? "event" : roll < 0.7 ? "watch" : "normal";
+  const usePhone = Math.random() < 0.4;
+  const source = usePhone ? "phone_layer" : "esp32_node";
+  const node = NODES[Math.floor(Math.random()*4)]; // upper corridor nodes
+  const srcNode = usePhone ? "phone" : "esp";
+  const srcColor = usePhone ? getCSS("--phone") : getCSS("--esp");
+
+  // 1. Detection at edge
+  caption.textContent = usePhone
+    ? `📱 Phone accelerometer captures vibration at ${node.name}…`
+    : `⌁ ESP32 node detects ground vibration at ${node.name}…`;
+  setNodeState(usePhone ? "phone" : "esp", "hot");
+  const win = makeWindow(kind);
+  await animateWaveCapture(win, srcColor, source);
+  await sleep(300);
+
+  // 2. Transmit edge → laptop over GLOF_Bridge WiFi
+  caption.textContent = `Transmitting 160-sample window over GLOF_Bridge WiFi → laptop…`;
+  setNodeState(usePhone ? "phone" : "esp", "tx");
+  setNodeState("laptop", "tx");
+  await new Promise(res => animatePacket(usePhone ? "w_phone" : "w_esp",
+                                         usePhone ? "p_phone" : "p_esp", 900, res));
+
+  // 3. Classify on laptop (real backend if connected, else local)
+  caption.textContent = `FastAPI /api/ingest → 5-feature extraction → logistic regression…`;
+  let result;
+  if (backend) {
+    result = await postToBackend(node.id, win, source);
+  }
+  if (!result) result = classifyLocal(win);
+  const cls = result.classification;
+  const conf = result.confidence;
+  const feats = result.features || extractFeatures(win);
+  showFeatures(feats, win.length);
+  showVerdict(cls, conf, false);
+  await sleep(500);
+
+  // 4. Persist to Supabase + push to dashboard in parallel
+  caption.textContent = cls === "event"
+    ? `⚠ EVENT classified (${(conf*100).toFixed(0)}%) → persist to Supabase + WebSocket broadcast`
+    : `Normal reading (${(conf*100).toFixed(0)}%) → logged + broadcast`;
+  setNodeState("laptop", cls === "event" ? "hot" : "ok");
+  await Promise.all([
+    new Promise(res => animatePacket("w_cloud","p_cloud", 800, res)),
+    new Promise(res => animatePacket("w_dash","p_dash", 800, res))
+  ]);
+  setNodeState("cloud", "ok");
+  setNodeState("dash", cls === "event" ? "hot" : "ok");
+
+  // 5. Dashboard update
+  addEvent(source, node.id, node.name, cls, conf, false);
+  flashMapNode(node.id, cls === "event");
+  caption.textContent = cls === "event"
+    ? `🔴 Alert shown on dashboard for ${node.name} — downstream settlements notified`
+    : `✓ Dashboard updated · ${node.name} nominal`;
+
+  await sleep(1400);
+  // reset states
+  ["esp","phone","laptop","cloud","dash"].forEach(id=>setNodeState(id,"ok"));
+}
+
+// animate wave being captured sample-by-sample
+async function animateWaveCapture(win, color, source) {
+  $("waveSrc").textContent = source === "phone_layer" ? "📱 phone_layer" : "⌁ esp32_node";
+  $("waveSrc").style.color = color;
+  const steps = 20;
+  for (let s=1;s<=steps;s++){
+    drawWave(win, color, s/steps);
+    await sleep(20);
+  }
+}
+
+function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+async function simLoop() {
+  if (!simRunning) return;
+  await runCycle();
+  if (simRunning) simTimer = setTimeout(simLoop, 800);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Optional real backend connection.
+// ─────────────────────────────────────────────────────────────────────────
+let backend = null;
+let ws = null;
+
+async function postToBackend(nodeId, win, source) {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(()=>ctrl.abort(), 4000);
+    const r = await fetch(backend + "/api/ingest", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ node_id: nodeId, sensor_window: win, source }),
+      signal: ctrl.signal
+    });
+    clearTimeout(to);
+    if (!r.ok) return null;
+    const evt = await r.json();
+    return { classification: evt.classification.classification, confidence: evt.classification.confidence, features: null };
+  } catch { return null; }
+}
+
+async function connectBackend() {
+  const url = $("apiUrl").value.trim().replace(/\/$/,"");
+  if (!url) { setConn("simulation", false); backend=null; return; }
+  try {
+    const r = await fetch(url + "/api/health", { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined });
+    if (!r.ok) throw 0;
+    const h = await r.json();
+    backend = url;
+    setConn(`backend live · ${h.nodes} nodes${h.supabase?" · supabase":""}`, true);
+    openWs(url);
+    loadModel(url);
+  } catch {
+    backend = null;
+    setConn("backend unreachable", false);
+  }
+}
+
+function openWs(url) {
+  try {
+    if (ws) ws.close();
+    ws = new WebSocket(url.replace(/^http/,"ws") + "/ws/live");
+    ws.onmessage = (m) => {
+      const msg = JSON.parse(m.data);
+      if (msg.type === "telemetry" && msg.event) {
+        const e = msg.event;
+        addEvent(e.source, e.node_id, e.node_name, e.classification.classification, e.classification.confidence,
+                 e.confirmation && e.confirmation.includes("cross"));
+        flashMapNode(e.node_id, e.classification.classification === "event");
+      }
+    };
+  } catch {}
+}
+
+async function loadModel(url) {
+  try {
+    const r = await fetch(url + "/api/model");
+    if (!r.ok) return;
+    const m = await r.json();
+    if (m.validation_accuracy) $("ml_acc").textContent = (m.validation_accuracy*100).toFixed(2)+"%";
+    if (m.validation_balanced_accuracy) $("ml_bacc").textContent = (m.validation_balanced_accuracy*100).toFixed(2)+"%";
+    if (m.training_samples) $("ml_train").textContent = m.training_samples.toLocaleString();
+    if (m.validation_samples) $("ml_val").textContent = m.validation_samples.toLocaleString();
+  } catch {}
+}
+
+function setConn(text, live) {
+  const el = $("conn");
+  el.textContent = text;
+  el.className = "status-pill" + (live ? " live" : "");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Wire up controls.
+// ─────────────────────────────────────────────────────────────────────────
+$("btnSim").addEventListener("click", () => {
+  simRunning = !simRunning;
+  $("btnSim").textContent = simRunning ? "⏸ Pause simulation" : "▶ Run simulation";
+  $("btnSim").classList.toggle("active", simRunning);
+  if (simRunning) simLoop();
+  else { clearTimeout(simTimer); ["esp","phone","laptop","cloud","dash"].forEach(id=>setNodeState(id,"ok")); caption.textContent = "Simulation paused"; }
+});
+
+$("btnConnect").addEventListener("click", connectBackend);
+
+// Autostart the simulation on load.
+window.addEventListener("load", () => {
+  simRunning = true;
+  simLoop();
+});
+</script>
+</body>
+</html>

@@ -15,15 +15,34 @@
 }
 
 .map-wrap {
-  height: clamp(390px, 34vw, 520px);
+  height: clamp(340px, 30vw, 460px);
 }
 
 .side-column {
   min-width: 0;
+  gap: 14px;
 }
 
 .waveform {
-  height: 290px;
+  height: 250px;
+}
+
+.node-list {
+  max-height: 210px;
+  overflow: hidden;
+}
+
+.node-list .nodes {
+  max-height: 136px;
+  overflow-y: auto;
+}
+
+.waveform .chart {
+  height: 150px;
+}
+
+.bottom-grid {
+  margin-top: 14px;
 }
 
 @media (max-width: 900px) {

@@ -4,3 +4,8 @@ backend/__pycache__/
 scripts/__pycache__/
 *.pyc
 .env
+.venv/
+backend/.venv/
+mobile/.expo/
+mobile/node_modules/
+logs/
