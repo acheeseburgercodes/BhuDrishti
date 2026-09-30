@@ -122,7 +122,7 @@ export function Empty({ children }) {
 
 export function Button({ variant = 'secondary', className, ...rest }) {
   const styles = {
-    primary: 'bg-accent text-white hover:opacity-90 dark:text-black',
+    primary: 'bg-accent text-on-accent hover:opacity-90',
     secondary: 'border border-line bg-raised text-ink hover:bg-surface',
     danger: 'border border-danger/40 text-danger hover:bg-danger/10',
     ghost: 'text-muted hover:text-ink',
@@ -140,6 +140,18 @@ export function Sparkline({ values = [], label, className }) {
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className={cx('h-16 w-full rounded-lg bg-surface text-accent', className)} role="img" aria-label={`${label}: ${values.length} samples, peak ${max.toFixed(2)}`}>
       <line x1="0" x2={w} y1={h / 2} y2={h / 2} className="stroke-line" strokeWidth="1" />
       <path d={d} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+
+/** Brand mark: a ridge line over a river with a sensing ping. Decorative. */
+export function LogoMark({ className }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" className={className}>
+      <rect width="32" height="32" rx="9" fill="#0b1a1c" />
+      <path d="M4 21 11 11l4 5 4-7 9 12" fill="none" stroke="#eef3ef" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <path d="M4 25c4-2 8 2 12 0s8-2 12 0" fill="none" stroke="#56c2b4" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="19" cy="9" r="2" fill="#f0b44c" />
     </svg>
   )
 }

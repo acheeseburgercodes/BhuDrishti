@@ -3,7 +3,8 @@ import { formatAge } from '@shared/freshness.js'
 import { API } from '../lib/api.js'
 import { isDemo } from '../lib/liveState.js'
 import { useI18n } from '../lib/i18n.jsx'
-import { Badge } from './ui.jsx'
+import { HOME_HREF } from '../lib/route.js'
+import { Badge, LogoMark } from './ui.jsx'
 
 const CONNECTION = {
   live: { tone: 'ok', label: 'Live stream', pulse: true },
@@ -20,9 +21,14 @@ export function StatusBar({ state, now, queue }) {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-        <div className="mr-auto min-w-0">
-          <p className="text-lg font-semibold tracking-tight text-ink">{t('appName')}</p>
-          <p className="truncate text-xs text-muted">{t('tagline')}</p>
+        <div className="mr-auto flex min-w-0 items-center gap-3">
+          <a href={HOME_HREF} className="group flex min-w-0 items-center gap-3 rounded-lg" aria-label={`${t('appName')} home`}>
+            <LogoMark className="size-8 shrink-0" />
+            <span className="min-w-0">
+              <span className="block text-lg font-semibold tracking-tight text-ink">{t('appName')} <span className="ml-1 align-middle text-xs font-medium text-muted">Operator portal</span></span>
+              <span className="block truncate text-xs text-muted">{t('tagline')}</span>
+            </span>
+          </a>
         </div>
         <div className="flex flex-wrap items-center gap-2" aria-live="polite">
           {demo
