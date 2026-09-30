@@ -23,8 +23,10 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import random
 import time
+import uuid
 from typing import Any
 
 import requests
@@ -32,6 +34,7 @@ import requests
 # ── Sensor window generation ─────────────────────────────────────────────────
 SAMPLE_COUNT = 160
 SAMPLE_RATE  = 100  # Hz
+DEVICE_KEY   = os.getenv("BHUDRISHTI_DEVICE_KEY", "")  # optional shared ingest key
 
 
 def _ambient_window() -> list[float]:
@@ -56,17 +59,28 @@ def _event_window() -> list[float]:
 
 
 # ── Backend communication ─────────────────────────────────────────────────────
-def post_event(api: str, node_id: str, source: str, is_event: bool) -> None:
+def post_event(api: str, node_id: str, source: str, is_event: bool, demo: bool = False) -> None:
     window = _event_window() if is_event else _ambient_window()
     payload = {
         "node_id":       node_id,
         "sensor_window": window,
         "source":        source,
-        "battery_pct":   round(random.uniform(55, 98), 1),
+        # The ESP32 has no battery telemetry yet; 100 is the contract default, not a reading.
+        "battery_pct":   100,
+        # Provenance (additive; older backends ignore unknown fields).
+        "channel":         "simulator" if demo else "esp32_bridge",
+        "transport":       "http" if demo else ("ble" if source == "phone_layer" else "wifi_softap"),
+        "client_event_id": f"b-{uuid.uuid4().hex[:20]}",
+        "demo":            demo,
+        # The detection trigger is real in live mode, but the waveform is synthesised here
+        # because the ESP32 sketch sends no raw IMU samples (see module docstring).
+        "synthetic_window": True,
     }
+    headers = {"X-Device-Key": DEVICE_KEY} if DEVICE_KEY else {}
     response = requests.post(
         f"{api.rstrip('/')}/api/ingest",
         json=payload,
+        headers=headers,
         timeout=8,
     )
     response.raise_for_status()
@@ -133,7 +147,7 @@ def demo_loop(api: str, node_id: str, interval: float) -> None:
         is_event = random.random() < 0.25
         source   = "phone_layer" if (is_event and random.random() < 0.4) else "esp32_node"
         try:
-            post_event(api, node_id, source, is_event=is_event)
+            post_event(api, node_id, source, is_event=is_event, demo=True)
         except requests.RequestException as exc:
             print(f"send failed: {exc}")
         time.sleep(interval)

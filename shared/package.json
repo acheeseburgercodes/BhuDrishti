@@ -1,0 +1,15 @@
+{
+  "name": "@bhudrishti/shared",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Dependency-free contracts, offline queue, freshness and coverage logic shared by web and mobile.",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./fixtures/*": "./fixtures/*"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

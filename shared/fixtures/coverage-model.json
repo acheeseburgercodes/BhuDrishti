@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "description": "Parameters for the indicative sensing-coverage model. Shared by backend/coverage.py and shared/src/coverage.js so both produce identical grids.",
+  "bbox": { "min_lat": 27.84, "max_lat": 28.30, "min_lng": 85.08, "max_lng": 85.56 },
+  "cell_deg": 0.02,
+  "default_range_km": { "esp32_node": 3.0, "phone_layer": 1.0 },
+  "default_reliability": 0.8,
+  "freshness": { "full_minutes": 5, "max_minutes": 60 },
+  "bands": { "covered": 0.6, "partial": 0.25 },
+  "risk": { "base": 0.15, "river_weight": 0.6, "river_scale_km": 2.0, "settlement_weight": 0.25, "settlement_scale_km": 3.0, "population_ref": 5000, "high_threshold": 0.5 },
+  "river_note": "Hand-digitised approximate centreline of the Bhote Koshi / Trishuli and lower Langtang Khola (±1 km). Not survey data; replace with an authoritative hydrography layer.",
+  "rivers": [
+    [[28.285, 85.382], [28.265, 85.378], [28.235, 85.372], [28.200, 85.360], [28.161, 85.345], [28.130, 85.320], [28.100, 85.295], [28.060, 85.255], [28.020, 85.225], [27.970, 85.187], [27.930, 85.165], [27.899, 85.147], [27.862, 85.125]],
+    [[28.161, 85.345], [28.175, 85.400], [28.200, 85.470], [28.213, 85.520]]
+  ]
+}

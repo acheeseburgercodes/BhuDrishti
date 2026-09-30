@@ -1,3 +1,5 @@
+-- LEGACY: superseded by supabase/migrations/*.sql (which extend this table idempotently).
+-- Kept so existing setups that ran this file remain valid.
 create table if not exists public.events (
   id text primary key,
   node_id text not null,
