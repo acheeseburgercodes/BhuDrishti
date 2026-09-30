@@ -4,6 +4,7 @@ import { API } from '../lib/api.js'
 import { isDemo } from '../lib/liveState.js'
 import { useI18n } from '../lib/i18n.jsx'
 import { HOME_HREF } from '../lib/route.js'
+import { ThemeToggle } from '../lib/theme.jsx'
 import { Badge, LogoMark } from './ui.jsx'
 
 const CONNECTION = {
@@ -38,12 +39,15 @@ export function StatusBar({ state, now, queue }) {
           <Badge tone="neutral" title={state.lastSyncAt || ''}>Synced {state.lastSyncAt ? formatAge(state.lastSyncAt, now) : 'never'}</Badge>
           {queue?.pending > 0 && <Badge tone="advisory">{queue.pending} {t('queued').toLowerCase()}</Badge>}
         </div>
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <span>{t('language')}</span>
-          <select value={lang} onChange={(e) => setLang(e.target.value)} className="rounded-lg border border-line bg-raised px-2 py-1 text-ink">
-            {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.nativeLabel}</option>)}
-          </select>
-        </label>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <span>{t('language')}</span>
+            <select value={lang} onChange={(e) => setLang(e.target.value)} className="min-h-10 rounded-lg border border-line bg-raised px-2 py-1 text-ink">
+              {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.nativeLabel}</option>)}
+            </select>
+          </label>
+          <ThemeToggle size="size-10" />
+        </div>
       </div>
       {state.error && state.connection === 'offline' && (
         <p role="status" className="border-t border-danger/30 bg-danger/10 px-4 py-2 text-center text-sm text-danger">

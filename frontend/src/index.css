@@ -1,17 +1,19 @@
 @import "tailwindcss";
-@import "maplibre-gl/dist/maplibre-gl.css";
 
 /*
  * BhuDrishti palette ("river & ridge").
  *  - accent  : glacial-melt teal of the Trishuli / Bhote Koshi
- *  - river   : deep himal blue (nods to the flag border), used for water & links in art
- *  - marigold: saffron/marigold safety signalling (advisory)
- *  - crimson : flag crimson, reserved for danger
- *  - surfaces: warm stone/mist in light mode, night-river slate in dark mode
- * Status colours are theme-aware variables so they stay legible on dark surfaces.
+ *  - river   : deep himal blue, used for water and phone-layer marks
+ *  - marigold: amber safety signalling (advisory), reserved
+ *  - crimson : flag crimson, reserved for danger / warning
+ *  - surfaces: warm stone in light mode, slate-river night in dark mode
+ * Theme: follows the OS by default; `html[data-theme="light|dark"]` (set by lib/theme.jsx,
+ * persisted in localStorage) overrides it. MapLibre CSS is imported by CorridorMap.jsx so
+ * the public landing page does not download it.
  */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans Devanagari", sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans Devanagari", "Nirmala UI", sans-serif;
+  --font-display: "Iowan Old Style", "Charter", "Source Serif Pro", "Source Serif 4", Georgia, "Noto Serif Devanagari", "Nirmala UI", serif;
   --font-mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, monospace;
   --color-surface: var(--bd-surface);
   --color-sunken: var(--bd-sunken);
@@ -28,77 +30,90 @@
   --color-watch: var(--bd-watch);
   --color-danger: var(--bd-danger);
   --color-demo: var(--bd-demo);
-  /* Fixed colours for the always-dark hero/footer bands. */
-  --color-night: #0b1a1c;
-  --color-night-2: #12292c;
-  --color-snow: #eef3ef;
-  --color-mist: #a9bcb7;
-  --color-glacier: #7fd6c9;
-  --color-saffron: #f0b44c;
-  --animate-rise: rise 320ms cubic-bezier(.2, .7, .2, 1) both;
-  --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+  --color-ridge: var(--bd-ridge);
+  --color-snowline: var(--bd-snowline);
+  --animate-rise: rise 240ms cubic-bezier(.2, .7, .2, 1) both;
+  --animate-pulse-ring: pulse-ring 1.8s ease-out 3;
 }
 
 :root {
-  --bd-surface: #f5f3ee;
-  --bd-sunken: #ebe7de;
+  --bd-surface: #f6f4ef;
+  --bd-sunken: #ece8df;
   --bd-raised: #ffffff;
-  --bd-ink: #122120;
-  --bd-muted: #4c5b58;
-  --bd-line: #d9d3c7;
-  --bd-accent: #0a6b66;
+  --bd-ink: #15201f;
+  --bd-muted: #4b5856;
+  --bd-line: #dbd5c9;
+  --bd-accent: #0b6760;
   --bd-on-accent: #ffffff;
-  --bd-river: #1f4e9c;
-  --bd-marigold: #a85d07;
+  --bd-river: #1f4e8c;
+  --bd-marigold: #955305;
   --bd-ok: #1d7a3e;
-  --bd-advisory: #a65a06;
-  --bd-watch: #b8430f;
+  --bd-advisory: #955305;
+  --bd-watch: #b0400d;
   --bd-danger: #b3152f;
   --bd-demo: #6a3fb5;
+  --bd-ridge: #c9c2b3;
+  --bd-snowline: #ffffff;
   --bd-focus: var(--bd-accent);
+  --bd-shadow: 0 1px 2px rgb(21 32 31 / .05), 0 8px 24px -12px rgb(21 32 31 / .12);
   color-scheme: light;
 }
 
+/* Dark palette: explicit choice, or OS preference when no explicit light choice. */
+:root[data-theme="dark"] {
+  --bd-surface: #0d1617;
+  --bd-sunken: #091112;
+  --bd-raised: #132123;
+  --bd-ink: #e7eeeb;
+  --bd-muted: #a1b2ae;
+  --bd-line: #26393b;
+  --bd-accent: #5cc4b6;
+  --bd-on-accent: #062624;
+  --bd-river: #8fb0ea;
+  --bd-marigold: #eaa84a;
+  --bd-ok: #67c78b;
+  --bd-advisory: #eaa84a;
+  --bd-watch: #f2955f;
+  --bd-danger: #f27d89;
+  --bd-demo: #b8a3f3;
+  --bd-ridge: #22373a;
+  --bd-snowline: #dfe8e5;
+  --bd-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 12px 32px -16px rgb(0 0 0 / .5);
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bd-surface: #0a1517;
-    --bd-sunken: #071012;
-    --bd-raised: #10201f;
-    --bd-ink: #e6eeea;
-    --bd-muted: #9db0ab;
-    --bd-line: #22373a;
-    --bd-accent: #56c2b4;
+  :root:not([data-theme="light"]) {
+    --bd-surface: #0d1617;
+    --bd-sunken: #091112;
+    --bd-raised: #132123;
+    --bd-ink: #e7eeeb;
+    --bd-muted: #a1b2ae;
+    --bd-line: #26393b;
+    --bd-accent: #5cc4b6;
     --bd-on-accent: #062624;
-    --bd-river: #8aaaea;
-    --bd-marigold: #e9a545;
-    --bd-ok: #63c688;
-    --bd-advisory: #e9a545;
-    --bd-watch: #f2915a;
-    --bd-danger: #f27a86;
-    --bd-demo: #b39cf2;
+    --bd-river: #8fb0ea;
+    --bd-marigold: #eaa84a;
+    --bd-ok: #67c78b;
+    --bd-advisory: #eaa84a;
+    --bd-watch: #f2955f;
+    --bd-danger: #f27d89;
+    --bd-demo: #b8a3f3;
+    --bd-ridge: #22373a;
+    --bd-snowline: #dfe8e5;
+    --bd-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 12px 32px -16px rgb(0 0 0 / .5);
     color-scheme: dark;
   }
 }
 
-/* Sections painted on the fixed dark band get a light focus ring. */
-.on-dark { --bd-focus: #7fd6c9; }
-
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
 
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
-  100% { box-shadow: 0 0 0 10px transparent; }
-}
-
-@keyframes marquee { to { transform: translateX(-100%); } }
-@keyframes signal-dash { to { stroke-dashoffset: -36; } }
-@keyframes packet { from { offset-distance: 0%; } to { offset-distance: 100%; } }
-@keyframes ping-scale {
-  0% { transform: scale(1); opacity: .55; }
-  100% { transform: scale(2.6); opacity: 0; }
+  100% { box-shadow: 0 0 0 8px transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -110,53 +125,31 @@
   }
 }
 
-html { background: var(--bd-surface); color: var(--bd-ink); }
-body { margin: 0; font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
-@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+html { background: var(--bd-surface); color: var(--bd-ink); -webkit-text-size-adjust: 100%; }
+body { margin: 0; font-family: var(--font-sans); -webkit-font-smoothing: antialiased; overflow-x: clip; }
 [id] { scroll-margin-top: 5rem; }
 
 :focus-visible { outline: 2px solid var(--bd-focus); outline-offset: 2px; }
 /* Programmatic focus targets (skip links, section jumps) should not draw a ring. */
 [tabindex="-1"]:focus, [tabindex="-1"]:focus-visible { outline: none; }
 
+.shadow-card { box-shadow: var(--bd-shadow); }
+
+/* Small caps-style labels; letter-spacing is dropped for Devanagari, where it breaks shaping. */
+.eyebrow { letter-spacing: .12em; text-transform: uppercase; }
+:lang(ne) .eyebrow, :lang(hi) .eyebrow, .eyebrow:lang(ne), .eyebrow:lang(hi) { letter-spacing: 0; }
+/* Devanagari needs a little more line height than Latin at display sizes. */
+:lang(ne) .font-display, :lang(hi) .font-display { line-height: 1.3; }
+
+/* Native select styled to match the design; keeps full keyboard/screen-reader support. */
+.bd-select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+.bd-select option { background: var(--bd-raised); color: var(--bd-ink); }
+
 .maplibregl-ctrl-attrib { font-size: 11px; }
 .maplibregl-canvas:focus-visible { outline: 2px solid var(--bd-accent); outline-offset: -2px; }
-
-/* ---------- Homepage motion primitives (see docs/UI_PROVENANCE.md) ---------- */
-
-.reveal { transition: opacity 600ms cubic-bezier(.2, .7, .2, 1), transform 600ms cubic-bezier(.2, .7, .2, 1); transition-delay: var(--reveal-delay, 0ms); }
-.reveal[data-reveal="out"] { opacity: 0; transform: translateY(16px); }
-
-/* Pointer-following spotlight; --x/--y are set from JS, centred by default. */
-.spotlight { position: relative; isolation: isolate; }
-.spotlight::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none;
-  background: radial-gradient(420px circle at var(--x, 50%) var(--y, 0%), color-mix(in srgb, var(--bd-accent) 14%, transparent), transparent 60%);
-  opacity: 0; transition: opacity 300ms;
-}
-.spotlight:hover::before, .spotlight:focus-within::before { opacity: 1; }
-
-.marquee { display: flex; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
-.marquee-track { display: flex; flex-shrink: 0; gap: 2rem; padding-right: 2rem; animation: marquee 55s linear infinite; }
-.marquee:hover .marquee-track, .marquee:focus-within .marquee-track { animation-play-state: paused; }
-
-.signal-line { stroke-dasharray: 4 8; animation: signal-dash 1.4s linear infinite; }
-.signal-packet { offset-rotate: 0deg; animation: packet var(--packet-duration, 3.2s) cubic-bezier(.45, 0, .55, 1) infinite; animation-delay: var(--packet-delay, 0s); }
-.ping { transform-box: fill-box; transform-origin: center; animation: ping-scale 2.4s ease-out infinite; animation-delay: var(--ping-delay, 0s); }
-
-.contours {
-  background-image:
-    radial-gradient(60% 80% at 85% 10%, color-mix(in srgb, #56c2b4 22%, transparent), transparent 70%),
-    radial-gradient(50% 60% at 5% 100%, color-mix(in srgb, #f0b44c 10%, transparent), transparent 70%),
-    repeating-radial-gradient(ellipse 120% 70% at 70% 120%, transparent 0 22px, rgb(255 255 255 / .045) 22px 23px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .marquee { flex-wrap: wrap; -webkit-mask-image: none; mask-image: none; }
-  .marquee-track { animation: none !important; flex-wrap: wrap; row-gap: .5rem; }
-  .marquee-track[aria-hidden="true"] { display: none; }
-  .signal-line, .ping { animation: none !important; }
-  .ping { display: none; }
-  .signal-packet { display: none; }
-  .reveal[data-reveal="out"] { opacity: 1; transform: none; }
-}

@@ -6,7 +6,7 @@ import seed from '../../../nepal-flood-corridor-seed-data.json'
 const now = () => new Date().toISOString()
 
 /** Offline fallback: bundled fixture, clearly labelled, with freshness relative to load time. */
-function fixtureState() {
+export function fixtureState() {
   const t = Date.now()
   return {
     nodes: seed.nodes.map(({ demo_last_seen_offset_s: offset, ...n }) => ({ ...n, demo: true, last_seen: offset != null ? new Date(t - offset * 1000).toISOString() : null })),

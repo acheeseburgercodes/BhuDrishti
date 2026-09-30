@@ -42,6 +42,17 @@ payload is accepted unchanged and the response keeps all original keys.
   Realtime subscription when the API publishes public settings. Coverage is recomputed in
   the browser with the shared model (parity-tested against Python) so the freshness slider
   is instant and works offline.
+* **Web routing** (`frontend/src/lib/route.js`, hash-based): empty hash, `#home` and landing
+  section hashes (`#how-it-works`, `#coverage`, `#alert-workflow`, `#languages-agents`,
+  `#limitations`, `#faq`; old `#problem` still resolves) render the public landing page.
+  Portal tabs (`#overview`, `#map`, `#events`, `#devices`, `#alerts`, `#agents`, `#capture`,
+  `#settings`) and the aliases `#portal` / `#dashboard` open the operator portal; `#legacy`
+  loads the old UI. Landing and portal are separate lazy chunks, so MapLibre, the WebSocket
+  and Supabase are only fetched once the portal opens. The landing status panel polls
+  `/api/health`, `/api/nodes` and `/api/alerts?status=pending_approval` once a minute (while
+  the tab is visible) and falls back to the bundled fixture with an "API offline" label.
+  Language (`bhudrishti.lang`) and theme (`bhudrishti.theme`: light/dark, default follows the
+  OS) are shared by landing and portal and persisted in localStorage.
 * **Mobile** (`mobile/`): AsyncStorage-backed `OfflineQueue` (shared), NetInfo-triggered
   flush, exponential backoff with jitter, permanent-error drop for 4xx, cached last data.
   Map is MapLibre GL in a WebView (Expo Go compatible) with a list fallback.

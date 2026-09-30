@@ -1,8 +1,9 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import { LanguageProvider } from './lib/i18n.jsx'
 import { useRoute } from './lib/route.js'
+import { ThemeProvider } from './lib/theme.jsx'
 
-// Split so the public homepage never downloads MapLibre / live-data code until the portal opens.
+// Split so the public landing page never downloads MapLibre / live-stream code until the portal opens.
 const HomePage = lazy(() => import('./home/HomePage.jsx'))
 const Portal = lazy(() => import('./Portal.jsx'))
 
@@ -25,5 +26,5 @@ export function Router() {
 }
 
 export default function App() {
-  return <LanguageProvider><Router /></LanguageProvider>
+  return <ThemeProvider><LanguageProvider><Router /></LanguageProvider></ThemeProvider>
 }

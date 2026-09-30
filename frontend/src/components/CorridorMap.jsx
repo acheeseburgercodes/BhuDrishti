@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { computeCoverage } from '@shared/coverage.js'
 import { freshnessState, formatAge } from '@shared/freshness.js'
 import coverageModel from '@shared-fixtures/coverage-model.json'

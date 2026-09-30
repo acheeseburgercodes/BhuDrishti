@@ -17,6 +17,7 @@ describe('parseRoute', () => {
     expect(parseRoute('')).toEqual({ view: 'home', section: null })
     expect(parseRoute('#home')).toEqual({ view: 'home', section: null })
     expect(parseRoute('#how-it-works')).toEqual({ view: 'home', section: 'how-it-works' })
+    expect(parseRoute('#alert-workflow')).toEqual({ view: 'home', section: 'alert-workflow' })
   })
 
   it('builds portal hrefs', () => {

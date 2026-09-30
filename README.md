@@ -33,7 +33,8 @@ uvicorn main:app --reload --port 8000        # http://localhost:8000/docs
 # 2. Web (new terminal)
 cd frontend
 npm install
-npm run dev                                   # http://localhost:5173  (legacy UI: /#legacy)
+npm run dev                                   # http://localhost:5173  landing page
+                                              # /#overview, /#map … operator portal; /#legacy old UI
 
 # 3. Mobile (new terminal; phone on the same Wi-Fi, Expo Go installed)
 cd mobile
