@@ -92,6 +92,15 @@ def test_operator_token_protects_alert_approval(api, monkeypatch):
     assert main.service.audit[0]["action"] == "alert.approve"
 
 
+def test_late_queued_reading_does_not_rewind_node_freshness(api):
+    client, main = api
+    fresh = datetime.now(timezone.utc).isoformat()
+    old = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    client.post("/api/ingest", json={"node_id": "BD-006", "sensor_window": ambient(), "recorded_at": fresh})
+    client.post("/api/ingest", json={"node_id": "BD-006", "sensor_window": ambient(), "recorded_at": old, "queued": True, "client_event_id": "c-late"})
+    assert main.service.find_node("BD-006")["last_seen"] == datetime.fromisoformat(fresh).isoformat()
+
+
 def test_simulated_events_are_labelled_demo(api):
     client, _ = api
     body = client.post("/api/simulate-event", json={"node_id": "BD-002", "severity": "normal"}).json()

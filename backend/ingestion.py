@@ -228,9 +228,16 @@ class IngestionService:
             "alert_confidence": confidence,
             "confirmation": "cross-confirmed" if confirm["cross_confirmed"] else "unconfirmed, single-source",
         }
-        node["last_seen"] = recorded_at
-        node["battery_pct"] = t.battery_pct
-        node["status"] = "critical" if is_event else "online"
+        # Late (queued) readings must not move node freshness/status backwards in time.
+        previous = node.get("last_seen")
+        try:
+            is_latest = previous is None or parse_ts(previous) <= parse_ts(recorded_at)
+        except ValueError:
+            is_latest = True
+        if is_latest:
+            node["last_seen"] = recorded_at
+            node["battery_pct"] = t.battery_pct
+            node["status"] = "critical" if is_event else "online"
         node.setdefault("source", t.source)
         if t.device_id:
             node["device_id"] = t.device_id
