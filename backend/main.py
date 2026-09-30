@@ -4,7 +4,6 @@ Runs fully in labelled demo mode without any environment variables. See docs/API
 """
 from __future__ import annotations
 
-import asyncio
 import hmac
 import json
 import logging
@@ -319,6 +318,15 @@ async def _decide(alert_id: str, body: AlertDecisionIn, actor: str, approve: boo
         raise HTTPException(status_code=404, detail="alert not found") from exc
     store.upsert_alert(alert)
     store.audit(service.audit[0])
+    if approve:
+        # Approved text is recorded; actual delivery (SMS/siren/app push) is out of scope here.
+        try:
+            from .sarvam import template_message
+        except ImportError:
+            from sarvam import template_message
+        message = template_message(alert["level"], "en", alert["node_name"])
+        alert["notification"] = {"lang": "en", "body": message["text"], "status": "approved", "provider": message["provider"]}
+        store.notification({"alert_id": alert["id"], **alert["notification"]})
     await manager.broadcast({"type": "alert", "alert": alert})
     return alert
 

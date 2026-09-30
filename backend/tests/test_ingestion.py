@@ -89,6 +89,7 @@ def test_operator_token_protects_alert_approval(api, monkeypatch):
     assert client.post(f"/api/alerts/{alert_id}/approve", json={}).status_code == 401
     r = client.post(f"/api/alerts/{alert_id}/approve", json={"note": "checked by phone"}, headers={"X-Operator-Token": "secret-op"})
     assert r.status_code == 200 and r.json()["status"] == "approved"
+    assert r.json()["notification"]["status"] == "approved" and "Rasuwagadhi" in r.json()["notification"]["body"]
     assert main.service.audit[0]["action"] == "alert.approve"
 
 
