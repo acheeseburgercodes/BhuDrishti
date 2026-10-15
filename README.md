@@ -46,6 +46,17 @@ python scripts\esp32_bridge.py --demo         # synthetic ESP32/phone events
 python scripts\esp32_bridge.py                # real ESP32: polls http://192.168.4.1/events
 ```
 
+Build an installable Android APK on Windows with the local Android SDK:
+
+```powershell
+.\scripts\get_jdk17.ps1                       # one-time JDK 17 setup
+.\scripts\build_apk.ps1 -Configuration Release
+# mobile\android\app\build\outputs\apk\release\app-release.apk
+```
+
+The local release APK uses the generated debug signing key so it can be installed for field
+testing. Configure a private production keystore before distributing through an app store.
+
 `scripts\start_services.ps1` starts API + web detached; `scripts\health_check.ps1` probes
 them. `scripts\verify.ps1` runs every test suite and build.
 

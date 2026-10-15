@@ -1,12 +1,13 @@
 {
   "name": "bhudrishti-mobile",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "test": "node --test test/*.test.mjs",
-    "check:bundle": "expo export --platform android --output-dir dist"
+    "check:bundle": "expo export --platform android --output-dir dist",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.1.2",
