@@ -28,6 +28,21 @@ function useHashTab(initial) {
   return [tab, go]
 }
 
+const TAB_ICONS = {
+  overview: 'M4 13h6V4H4v9Zm10 7h6V11h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z',
+  map: 'm4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2V6Zm5-2v14m6-12v14',
+  events: 'M4 12h3l2-5 4 10 2-5h5',
+  devices: 'M7 7h10v10H7V7Zm3-3v3m4-3v3m-4 10v3m4-3v3M4 10h3m10 0h3M4 14h3m10 0h3',
+  alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12h4',
+  agents: 'M12 3 4 7v5c0 4.5 3.2 7.5 8 9 4.8-1.5 8-4.5 8-9V7l-8-4Zm-3 9 2 2 4-4',
+  capture: 'M4 12h3m10 0h3M12 4v3m0 10v3m-5-5-2 2m14-10-2 2m0 6 2 2M5 7l2 2m5 6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-5v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4m0-12.8L17 7M7 17l-1.4 1.4',
+}
+
+function TabIcon({ id }) {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={TAB_ICONS[id]} /></svg>
+}
+
 function Tabs({ tab, onChange, counts }) {
   const { t } = useI18n()
   const refs = useRef({})
@@ -38,15 +53,16 @@ function Tabs({ tab, onChange, counts }) {
     if (next) { e.preventDefault(); onChange(next); refs.current[next]?.focus() }
   }
   return (
-    <nav aria-label="Sections" className="border-b border-line bg-surface">
-      <div role="tablist" aria-orientation="horizontal" onKeyDown={onKey} className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-2">
+    <nav aria-label="Sections" className="portal-nav">
+      <div role="tablist" aria-orientation="horizontal" onKeyDown={onKey} className="portal-tablist">
         {TABS.map((id) => (
           <button key={id} ref={(el) => { refs.current[id] = el }} id={`tab-${id}`} role="tab" type="button" aria-selected={tab === id} aria-controls="panel" tabIndex={tab === id ? 0 : -1}
             onClick={() => onChange(id)}
-            className={cx('relative shrink-0 px-3 py-2.5 text-sm font-medium transition-colors', tab === id ? 'text-ink' : 'text-muted hover:text-ink')}>
-            {label[id]}
-            {counts[id] > 0 && <span className="ml-1 rounded-full bg-advisory/15 px-1.5 text-xs text-advisory">{counts[id]}</span>}
-            <span aria-hidden="true" className={cx('absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent transition-transform duration-200', tab === id ? 'scale-x-100' : 'scale-x-0')} />
+            className={cx('portal-tab', tab === id ? 'portal-tab-active text-ink' : 'text-muted hover:text-ink')}>
+            <TabIcon id={id} />
+            <span className="portal-tab-label">{label[id]}</span>
+            {counts[id] > 0 && <span className="portal-tab-count">{counts[id]}</span>}
+            <span aria-hidden="true" className="portal-tab-indicator" />
           </button>
         ))}
       </div>
@@ -56,9 +72,9 @@ function Tabs({ tab, onChange, counts }) {
 
 function Metric({ label, value, detail, tone }) {
   return (
-    <div className="rounded-2xl border border-line bg-raised p-3 motion-safe:animate-rise">
+    <div className="metric-card group rounded-2xl border border-line bg-raised p-3 motion-safe:animate-rise">
       <p className="text-xs text-muted">{label}</p>
-      <p className={cx('mt-1 text-2xl font-semibold tabular-nums', tone)}><AnimatedNumber value={value} /></p>
+      <p className={cx('mt-1 text-2xl font-semibold tracking-tight tabular-nums transition-transform duration-300 group-hover:translate-x-0.5', tone)}><AnimatedNumber value={value} /></p>
       {detail && <p className="text-xs text-muted">{detail}</p>}
     </div>
   )
@@ -91,13 +107,16 @@ export default function Portal({ initialTab }) {
   const offline = state.dataOrigin === 'fixture'
 
   return (
-    <div className="min-h-screen pb-10">
+    <div className="portal-shell min-h-screen pb-24 xl:pb-10">
       {/* Skip link focuses the panel without touching the hash, which drives routing. */}
       <a href="#panel" onClick={(e) => { e.preventDefault(); focusTarget('panel') }} className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-raised focus:px-3 focus:py-2">Skip to content</a>
       <StatusBar state={state} now={now} queue={queue.status} />
-      <Tabs tab={tab} onChange={setTab} counts={{ alerts: stats.pending, capture: queue.status.pending }} />
-      <Disclaimer />
-      <main id="panel" role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={-1} className="mx-auto max-w-7xl space-y-4 px-4 pt-3">
+      <div className="mx-auto grid max-w-[90rem] xl:grid-cols-[13rem_minmax(0,1fr)] xl:gap-5 xl:px-4">
+        <Tabs tab={tab} onChange={setTab} counts={{ alerts: stats.pending, capture: queue.status.pending }} />
+        <div className="min-w-0">
+          <Disclaimer />
+          <main id="panel" role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={-1} className="space-y-4 px-4 pt-3 xl:px-0">
+          <div key={tab} className="portal-panel space-y-4">
         {tab === 'overview' && (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -128,8 +147,11 @@ export default function Portal({ initialTab }) {
         {tab === 'alerts' && <AlertsPanel alerts={alerts} now={now} onChanged={refresh} />}
         {tab === 'agents' && <AgentsPanel disabled={offline} />}
         {tab === 'capture' && <CapturePanel nodes={nodes} queue={queue} />}
-        {tab === 'settings' && <SettingsPanel config={state.config} onSimulated={refresh} />}
-      </main>
+          {tab === 'settings' && <SettingsPanel config={state.config} onSimulated={refresh} />}
+          </div>
+          </main>
+        </div>
+      </div>
     </div>
   )
 }

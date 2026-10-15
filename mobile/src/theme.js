@@ -1,13 +1,14 @@
 import { StyleSheet } from 'react-native'
 
 export const C = {
-  bg: '#0d1413', surface: '#141d1b', line: '#26332f', ink: '#e7eeeb', muted: '#9aaba5',
+  bg: '#091211', surface: '#111d1b', surface2: '#172522', glass: '#182623f2', line: '#263733', lineSoft: '#334640', ink: '#edf5f1', muted: '#9fb1aa',
   accent: '#2dd4bf', ok: '#4ade80', advisory: '#fbbf24', watch: '#fb923c', danger: '#f87171', demo: '#c4b5fd',
+  accentSoft: '#173b35',
 }
 
 export const s = StyleSheet.create({
-  screen: { padding: 16, paddingBottom: 32, gap: 12 },
-  card: { backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.line, padding: 16 },
+  screen: { width: '100%', maxWidth: 980, alignSelf: 'center', padding: 16, paddingBottom: 96, gap: 12 },
+  card: { backgroundColor: C.surface, borderRadius: 20, borderWidth: 1, borderColor: C.line, padding: 16, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginBottom: 6 },
   title: { fontSize: 17, fontWeight: '700', color: C.ink, marginBottom: 8 },
   body: { fontSize: 14, color: C.ink, lineHeight: 20 },

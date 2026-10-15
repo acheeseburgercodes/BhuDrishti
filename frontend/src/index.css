@@ -34,6 +34,7 @@
   --color-snowline: var(--bd-snowline);
   --animate-rise: rise 240ms cubic-bezier(.2, .7, .2, 1) both;
   --animate-pulse-ring: pulse-ring 1.8s ease-out 3;
+  --animate-float: float 7s ease-in-out infinite;
 }
 
 :root {
@@ -116,6 +117,21 @@
   100% { box-shadow: 0 0 0 8px transparent; }
 }
 
+@keyframes float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -10px, 0) scale(1.015); }
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.995); filter: blur(3px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes sheen {
+  from { transform: translateX(-130%) skewX(-18deg); }
+  to { transform: translateX(430%) skewX(-18deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
@@ -134,6 +150,112 @@ body { margin: 0; font-family: var(--font-sans); -webkit-font-smoothing: antiali
 [tabindex="-1"]:focus, [tabindex="-1"]:focus-visible { outline: none; }
 
 .shadow-card { box-shadow: var(--bd-shadow); }
+
+/* Spring-like, restrained motion shared by the public site and operator portal. */
+.portal-shell {
+  background:
+    radial-gradient(circle at 8% 7%, color-mix(in srgb, var(--bd-accent) 9%, transparent), transparent 25rem),
+    radial-gradient(circle at 94% 42%, color-mix(in srgb, var(--bd-river) 7%, transparent), transparent 28rem),
+    var(--bd-surface);
+}
+
+.portal-panel { animation: panel-in 420ms cubic-bezier(.22, 1, .36, 1) both; }
+
+.portal-nav {
+  position: fixed;
+  z-index: 35;
+  right: .65rem;
+  bottom: max(.65rem, env(safe-area-inset-bottom));
+  left: .65rem;
+  border: 1px solid color-mix(in srgb, var(--bd-line) 78%, transparent);
+  border-radius: 1.35rem;
+  background: color-mix(in srgb, var(--bd-raised) 82%, transparent);
+  box-shadow: 0 18px 45px -18px rgb(0 0 0 / .38), inset 0 1px rgb(255 255 255 / .08);
+  backdrop-filter: blur(24px) saturate(1.25);
+}
+
+.portal-tablist { display: flex; gap: .2rem; overflow-x: auto; padding: .35rem; scrollbar-width: none; }
+.portal-tablist::-webkit-scrollbar { display: none; }
+.portal-tab {
+  position: relative;
+  display: inline-flex;
+  min-width: 3.15rem;
+  min-height: 3.15rem;
+  flex: 1 0 3.15rem;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  border-radius: 1rem;
+  transition: color 220ms ease, background 320ms cubic-bezier(.22, 1, .36, 1), transform 320ms cubic-bezier(.22, 1, .36, 1);
+}
+.portal-tab:active { transform: scale(.94); transition-duration: 90ms; }
+.portal-tab-active { background: color-mix(in srgb, var(--bd-accent) 14%, var(--bd-raised)); }
+.portal-tab-label { display: none; font-size: .875rem; font-weight: 600; }
+.portal-tab-count {
+  position: absolute;
+  top: .2rem;
+  right: .2rem;
+  display: grid;
+  min-width: 1rem;
+  height: 1rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--bd-advisory);
+  padding-inline: .2rem;
+  color: var(--bd-surface);
+  font-size: .625rem;
+  font-weight: 800;
+}
+.portal-tab-indicator { position: absolute; bottom: .2rem; width: .25rem; height: .25rem; border-radius: 999px; background: var(--bd-accent); opacity: 0; transform: scale(0); transition: 280ms cubic-bezier(.22, 1, .36, 1); }
+.portal-tab-active .portal-tab-indicator { opacity: 1; transform: scale(1); }
+
+@media (max-width: 27.99rem) {
+  .portal-tablist { gap: 0; padding-inline: .2rem; }
+  .portal-tab { min-width: 2.7rem; min-height: 3.15rem; flex-basis: 2.7rem; }
+}
+
+.metric-card {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10px 28px -24px rgb(0 0 0 / .65);
+  transition: transform 360ms cubic-bezier(.22, 1, .36, 1), border-color 250ms ease, box-shadow 360ms ease;
+}
+.metric-card::after {
+  position: absolute;
+  inset: 0 auto 0 -35%;
+  width: 22%;
+  content: '';
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bd-accent) 12%, transparent), transparent);
+  opacity: 0;
+}
+@media (hover: hover) {
+  .metric-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--bd-accent) 38%, var(--bd-line)); box-shadow: 0 18px 38px -28px rgb(0 0 0 / .7); }
+  .metric-card:hover::after { opacity: 1; animation: sheen 850ms ease both; }
+}
+
+@media (min-width: 48rem) {
+  .portal-tab-label { display: inline; }
+  .portal-tab { min-width: max-content; padding-inline: .8rem; }
+}
+
+@media (min-width: 80rem) {
+  .portal-nav {
+    position: sticky;
+    top: 5.25rem;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    align-self: start;
+    margin-top: 1rem;
+    border-radius: 1.5rem;
+  }
+  .portal-tablist { flex-direction: column; padding: .5rem; overflow: visible; }
+  .portal-tab { width: 100%; min-width: 0; min-height: 2.9rem; flex: none; justify-content: flex-start; padding-inline: .85rem; }
+  .portal-tab-label { display: inline; }
+  .portal-tab-count { position: static; margin-left: auto; }
+  .portal-tab-indicator { top: 50%; right: auto; bottom: auto; left: .2rem; width: .2rem; height: 1.15rem; transform: translateY(-50%) scaleY(0); }
+  .portal-tab-active .portal-tab-indicator { transform: translateY(-50%) scaleY(1); }
+}
 
 /* Small caps-style labels; letter-spacing is dropped for Devanagari, where it breaks shaping. */
 .eyebrow { letter-spacing: .12em; text-transform: uppercase; }

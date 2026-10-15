@@ -1,5 +1,5 @@
-import React from 'react'
-import { Dimensions, Text, View } from 'react-native'
+import React, { useEffect, useRef } from 'react'
+import { Animated, Text, useWindowDimensions, View } from 'react-native'
 import { C, s } from './theme'
 
 const TONE = { ok: C.ok, advisory: C.advisory, watch: C.watch, danger: C.danger, demo: C.demo, accent: C.accent, neutral: C.muted }
@@ -14,17 +14,22 @@ export function Badge({ tone = 'neutral', children }) {
 }
 
 export function Card({ eyebrow, title, children, style }) {
+  const entrance = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start()
+  }, [entrance])
   return (
-    <View style={[s.card, style]} accessibilityRole="summary">
+    <Animated.View style={[s.card, style, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]} accessibilityRole="summary">
       {eyebrow ? <Text style={s.eyebrow}>{eyebrow}</Text> : null}
       {title ? <Text style={s.title} accessibilityRole="header">{title}</Text> : null}
       {children}
-    </View>
+    </Animated.View>
   )
 }
 
 export function Waveform({ samples }) {
-  const W = Dimensions.get('window').width - 66
+  const { width } = useWindowDimensions()
+  const W = Math.max(220, Math.min(914, width - (width >= 760 ? 198 : 66)))
   const H = 72
   const label = samples?.length ? `Waveform, ${samples.length} samples` : 'Waveform, no samples yet'
   if (!samples || samples.length < 2) return <View accessible accessibilityLabel={label} style={{ width: W, height: H, backgroundColor: C.bg, borderRadius: 8 }} />
